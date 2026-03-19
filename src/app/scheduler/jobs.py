@@ -89,8 +89,20 @@ async def morning_briefing(bot, scheduler=None) -> None:
         lines.append("вЂў (РїРѕРєР° РЅРµС‚)")
 
     if cfg.allowed_telegram_id:
+        await _send_hydration_runtime_ping(bot=bot, chat_id=cfg.allowed_telegram_id)
         await bot.send_message(cfg.allowed_telegram_id, "\n".join(lines))
 
+
+
+async def _send_hydration_runtime_ping(*, bot, chat_id: int | None) -> None:
+    """Minimal hydration runtime entry-point (send/check path)."""
+    if not chat_id:
+        return
+
+    try:
+        await bot.send_message(chat_id, "Hydration reminder: drink water.")
+    except Exception:
+        log.exception("Hydration runtime entry-point failed")
 
 async def family_daily_check_job(bot=None) -> None:
     """
