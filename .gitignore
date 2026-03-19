@@ -1,7 +1,23 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
+
+# Env (секреты)
 .env
+
+# Logs
 logs/
+*.log
+
+# Secrets
 secrets/
+
+# Database
+data/*.db
+
+# Google tokens
 data/gcal_token.json
+
+# IDE
+.vscode/
