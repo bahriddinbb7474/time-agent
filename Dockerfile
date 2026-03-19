@@ -4,6 +4,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
+RUN mkdir -p /app/data
 
 # tzdata для правильной TZ внутри контейнера + базовые CA
 RUN apt-get update && apt-get install -y --no-install-recommends \

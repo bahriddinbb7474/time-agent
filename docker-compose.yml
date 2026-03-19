@@ -8,5 +8,11 @@ services:
       - TZ=${TZ:-Asia/Tashkent}
     volumes:
       - ./logs:/app/logs
-      - ./data:/app/data
+      - app_data:/app/data
+      - C:/time-agent-secrets:/run/secrets:ro
+    ports:
+      - "8085:8085"
     restart: always
+
+volumes:
+  app_data:

@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .env
 logs/
-data/
+secrets/
+data/gcal_token.json
