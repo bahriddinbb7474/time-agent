@@ -11,6 +11,7 @@ from app.db.database import get_sessionmaker
 from app.db.models import AlertQueue
 from app.services.boss_priority_service import BossPriorityService
 from app.services.family_contact_service import FamilyContactService
+from app.services.daily_context_service import DailyContextService
 from app.services.prayer_times_service import PrayerTimesService
 from app.services.quran_service import QuranService
 from app.services.routine_service import RoutineService
@@ -99,10 +100,36 @@ async def _send_hydration_runtime_ping(*, bot, chat_id: int | None) -> None:
     if not chat_id:
         return
 
+    now = datetime.now(APP_TZ)
+
     try:
+        Session = get_sessionmaker()
+        async with Session() as session:
+            blocked = await _is_hydration_blocked_by_siyam_daylight(
+                session=session,
+                now=now,
+            )
+        if blocked:
+            return
+
         await bot.send_message(chat_id, "Hydration reminder: drink water.")
     except Exception:
         log.exception("Hydration runtime entry-point failed")
+
+
+async def _is_hydration_blocked_by_siyam_daylight(*, session, now: datetime) -> bool:
+    target_date = now.date()
+
+    policy = await DailyContextService(session).get_policy_for_date(target_date)
+    if policy is None or not policy.is_siyam_day:
+        return False
+
+    prayer_times = await PrayerTimesService(session).get_prayer_times(target_date)
+    fajr_at = datetime.combine(target_date, prayer_times.fajr, tzinfo=APP_TZ)
+    maghrib_at = datetime.combine(target_date, prayer_times.maghrib, tzinfo=APP_TZ)
+
+    return fajr_at <= now < maghrib_at
+
 
 async def family_daily_check_job(bot=None) -> None:
     """
