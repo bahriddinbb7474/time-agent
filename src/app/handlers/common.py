@@ -11,7 +11,7 @@ from app.core.time import APP_TZ
 from app.db import crud
 from app.db.database import get_sessionmaker
 from app.db.models import AlertQueue
-from app.scheduler.jobs import morning_briefing, _schedule_same_alert
+from app.scheduler.jobs import morning_briefing, evening_summary, _schedule_same_alert
 from app.services.prayer_times_service import PrayerTimesService
 
 router = Router()
@@ -38,6 +38,12 @@ async def start_cmd(message: Message) -> None:
 async def test_brief_cmd(message: Message) -> None:
     await message.answer("🧪 Запускаю тестовый утренний брифинг…")
     await morning_briefing(message.bot)
+
+
+@router.message(Command("test_evening"))
+async def test_evening_cmd(message: Message) -> None:
+    await message.answer("🧪 Запускаю тестовый вечерний отчёт…")
+    await evening_summary(message.bot)
 
 
 @router.message(Command("prayer_today"))
