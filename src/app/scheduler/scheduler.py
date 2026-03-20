@@ -203,11 +203,11 @@ async def recover_alerts(
 
         if current_name:
             text = (
-                f"вљ пёЏ РЇ Р±С‹Р» РѕС„Р»Р°Р№РЅ РІРѕ РІСЂРµРјСЏ {latest_missed}.\n"
-                f"РЎРµР№С‡Р°СЃ Р°РєС‚СѓР°Р»РµРЅ {current_name}."
+                f"⚠️ Я был офлайн во время {latest_missed}.\n"
+                f"Сейчас актуален {current_name}."
             )
         else:
-            text = f"вљ пёЏ РЇ Р±С‹Р» РѕС„Р»Р°Р№РЅ РІРѕ РІСЂРµРјСЏ {latest_missed}."
+            text = f"⚠️ Я был офлайн во время {latest_missed}."
 
         try:
             await bot.send_message(cfg.allowed_telegram_id, text)

@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
@@ -21,6 +21,7 @@ from app.db.models import Base
 from app.db.seed import seed_if_empty
 from app.db.middleware import DbSessionMiddleware
 from app.scheduler.scheduler import build_scheduler, recover_alerts
+from app.scheduler.jobs import morning_briefing
 
 log = logging.getLogger("time-agent")
 
@@ -29,9 +30,9 @@ async def init_db() -> None:
     """
     Dev-safe DB initialization.
 
-    Важно:
-    create_all() вызывается всегда, чтобы при изменении ORM-схемы
-    недостающие таблицы создавались автоматически.
+    Р’Р°Р¶РЅРѕ:
+    create_all() РІС‹Р·С‹РІР°РµС‚СЃСЏ РІСЃРµРіРґР°, С‡С‚РѕР±С‹ РїСЂРё РёР·РјРµРЅРµРЅРёРё ORM-СЃС…РµРјС‹
+    РЅРµРґРѕСЃС‚Р°СЋС‰РёРµ С‚Р°Р±Р»РёС†С‹ СЃРѕР·РґР°РІР°Р»РёСЃСЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.
     """
     log.info("Ensuring DB schema via create_all()...")
 
@@ -51,7 +52,7 @@ async def main() -> None:
     setup_logging()
     cfg = load_config()
 
-    log.info("Starting bot… TZ=%s allowed_id=%s", cfg.tz, cfg.allowed_telegram_id)
+    log.info("Starting botвЂ¦ TZ=%s allowed_id=%s", cfg.tz, cfg.allowed_telegram_id)
 
     await init_db()
 
@@ -59,6 +60,12 @@ async def main() -> None:
     scheduler = build_scheduler(bot)
     scheduler.start()
     log.info("Scheduler started")
+
+    try:
+        await morning_briefing(bot, scheduler)
+        log.info("Startup morning briefing completed")
+    except Exception:
+        log.exception("Startup morning briefing failed")
 
     dp = Dispatcher()
     dp["scheduler"] = scheduler

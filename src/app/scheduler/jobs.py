@@ -69,25 +69,25 @@ async def morning_briefing(bot, scheduler=None) -> None:
         rules = await RulesService(session).list_rules()
         timed, floating = await TaskService(session).list_today()
 
-    lines = ["рџ•— Р”РѕР±СЂРѕРµ СѓС‚СЂРѕ! РџР»Р°РЅ РЅР° СЃРµРіРѕРґРЅСЏ\n"]
+    lines = ["🕗 Доброе утро! План на сегодня\n"]
 
-    lines.append("рџ›Ў Р—Р°С‰РёС‰С‘РЅРЅС‹Рµ СЃР»РѕС‚С‹:")
+    lines.append("🛡 Защищённые слоты:")
     for r in rules:
-        lines.append(f"вЂў {r.name}: {r.start_time}-{r.end_time}")
+        lines.append(f"• {r.name}: {r.start_time}-{r.end_time}")
 
-    lines.append("\nрџ“Њ Р—Р°РґР°С‡Рё РїРѕ РІСЂРµРјРµРЅРё:")
+    lines.append("\n📌 Задачи по времени:")
     if timed:
         for t in timed:
-            lines.append(f"вЂў {t.planned_at} вЂ” {t.title} ({t.duration_min} РјРёРЅ)")
+            lines.append(f"• {t.planned_at} — {t.title} ({t.duration_min} мин)")
     else:
-        lines.append("вЂў (РїРѕРєР° РЅРµС‚)")
+        lines.append("• (пока нет)")
 
-    lines.append("\nрџ“ќ Р—Р°РґР°С‡Рё Р±РµР· РІСЂРµРјРµРЅРё:")
+    lines.append("\n📝 Задачи без времени:")
     if floating:
         for t in floating:
-            lines.append(f"вЂў #{t.id} вЂ” {t.title}")
+            lines.append(f"• #{t.id} — {t.title}")
     else:
-        lines.append("вЂў (РїРѕРєР° РЅРµС‚)")
+        lines.append("• (пока нет)")
 
     if cfg.allowed_telegram_id:
         await _send_hydration_runtime_ping(bot=bot, chat_id=cfg.allowed_telegram_id)
@@ -183,7 +183,7 @@ async def evening_summary(bot) -> None:
         critical_tasks = [
             t
             for t in (timed + floating)
-            if "рџ”Ґ" in t.title or t.title.lower().startswith("С€РµС„ СЃСЂРѕС‡РЅРѕ:")
+            if "🔥" in t.title or t.title.lower().startswith("шеф срочно:")
         ]
 
         open_tasks = [t for t in (timed + floating) if t.status != "done"]
@@ -201,44 +201,44 @@ async def evening_summary(bot) -> None:
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="рџ“– Р”РѕС‡РёС‚Р°СЋ СЃРµР№С‡Р°СЃ",
+                            text="📖 Дочитаю сейчас",
                             callback_data=f"quran_followup:read_now:{alert_id}",
                         ),
                         InlineKeyboardButton(
-                            text="рџ“€ РџРµСЂРµРЅРµСЃС‚Рё РЅР° Р·Р°РІС‚СЂР°",
+                            text="📈 Перенести на завтра",
                             callback_data=f"quran_followup:move_tomorrow:{alert_id}",
                         ),
                     ]
                 ]
             )
 
-    lines = ["рџ• Р’РµС‡РµСЂРЅРёР№ spiritual report\n"]
+    lines = ["🕘 Вечерний spiritual report\n"]
 
-    lines.append("рџ•‹ РќР°РјР°Р·С‹")
+    lines.append("🕋 Намазы")
     lines.extend(prayer_section)
 
-    lines.append("\nрџ“– РљРѕСЂР°РЅ")
+    lines.append("\n📖 Коран")
     lines.extend(quran_lines)
 
-    lines.append("\nрџ”Ґ Critical Р·Р°РґР°С‡Рё")
+    lines.append("\n🔥 Critical задачи")
     if critical_tasks:
         for t in critical_tasks:
             if t.planned_at:
-                lines.append(f"вЂў #{t.id} {t.planned_at} вЂ” {t.title} [{t.status}]")
+                lines.append(f"• #{t.id} {t.planned_at} — {t.title} [{t.status}]")
             else:
-                lines.append(f"вЂў #{t.id} вЂ” {t.title} [{t.status}]")
+                lines.append(f"• #{t.id} — {t.title} [{t.status}]")
     else:
-        lines.append("вЂў РђРєС‚РёРІРЅС‹С… critical Р·Р°РґР°С‡ РЅРµС‚.")
+        lines.append("• Активных critical задач нет.")
 
-    lines.append("\nрџ“Њ Р§С‚Рѕ РѕСЃС‚Р°Р»РѕСЃСЊ Р·Р°РєСЂС‹С‚СЊ СЃРµРіРѕРґРЅСЏ")
+    lines.append("\n📌 Что осталось закрыть сегодня")
     if open_tasks:
         for t in open_tasks:
             if t.planned_at:
-                lines.append(f"вЂў #{t.id} {t.planned_at} вЂ” {t.title} [{t.status}]")
+                lines.append(f"• #{t.id} {t.planned_at} — {t.title} [{t.status}]")
             else:
-                lines.append(f"вЂў #{t.id} вЂ” {t.title} [{t.status}]")
+                lines.append(f"• #{t.id} — {t.title} [{t.status}]")
     else:
-        lines.append("вЂў Р’СЃС‘ Р·Р°РєСЂС‹С‚Рѕ вњ…")
+        lines.append("• Всё закрыто ✅")
 
     if cfg.allowed_telegram_id:
         await bot.send_message(
@@ -469,7 +469,7 @@ async def _handle_boss_critical(session, alert: AlertQueue, bot, scheduler) -> N
         await crud.finalize_firing_alert(session, alert_id=alert.id, status="failed")
         return
 
-    title = payload.get("boss_title") or payload.get("text") or "РЁРµС„ СЃСЂРѕС‡РЅРѕ: Р·Р°РґР°С‡Р°"
+    title = payload.get("boss_title") or payload.get("text") or "Шеф срочно: задача"
     repeat_count = int(payload.get("repeat_count", 0))
     max_repeats = int(payload.get("max_repeats", 20))
     repeat_interval_min = alert.repeat_interval_min or 15
@@ -549,7 +549,7 @@ async def _handle_boss_critical(session, alert: AlertQueue, bot, scheduler) -> N
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="вњ… Critical Р·Р°РґР°С‡Р° РІС‹РїРѕР»РЅРµРЅР°",
+                    text="✅ Critical задача выполнена",
                     callback_data=f"boss_done:{alert.id}",
                 )
             ]
@@ -612,7 +612,19 @@ async def _handle_boss_critical(session, alert: AlertQueue, bot, scheduler) -> N
 async def _handle_quran_followup(session, alert: AlertQueue, bot, scheduler) -> None:
     payload = _load_payload(alert.payload_json)
     chat_id = payload.get("chat_id")
-    text = payload.get("text", "рџ“– РќР°РїРѕРјРёРЅР°РЅРёРµ РїРѕ РљРѕСЂР°РЅСѓ.")
+    safe_fallback_text = "📖 Напоминание по Корану.\nВыберите действие:"
+    raw_text = payload.get("text")
+    text = raw_text.strip() if isinstance(raw_text, str) else ""
+    if not text:
+        text = safe_fallback_text
+
+    mojibake_markers = ("Р’", "РЏ", "РЎ", "С‹", "в€", "рџ", "пё")
+    if any(marker in text for marker in mojibake_markers):
+        log.warning(
+            "Quran followup payload text looks mojibake for alert_id=%s; using fallback text",
+            alert.id,
+        )
+        text = safe_fallback_text
 
     if not chat_id:
         await crud.finalize_firing_alert(session, alert_id=alert.id, status="failed")
@@ -624,11 +636,11 @@ async def _handle_quran_followup(session, alert: AlertQueue, bot, scheduler) -> 
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="рџ“– Р”РѕС‡РёС‚Р°СЋ СЃРµР№С‡Р°СЃ",
+                    text="📖 Дочитаю сейчас",
                     callback_data=f"quran_followup:read_now:{alert.id}",
                 ),
                 InlineKeyboardButton(
-                    text="рџ“€ РџРµСЂРµРЅРµСЃС‚Рё РЅР° Р·Р°РІС‚СЂР°",
+                    text="📈 Перенести на завтра",
                     callback_data=f"quran_followup:move_tomorrow:{alert.id}",
                 ),
             ]
@@ -854,13 +866,13 @@ def _build_boss_runtime_message(
     is_critical: bool,
 ) -> str:
     if is_critical:
-        header = "рџ”Ґ РЁРµС„: РљР РРўРР§Р•РЎРљРђРЇ Р·Р°РґР°С‡Р°"
+        header = "🔥 Шеф: КРИТИЧЕСКАЯ задача"
     elif urgency_code == "critical":
-        header = "рџ”Ґ РЁРµС„: РІС‹СЃРѕРєРёР№ СЂРёСЃРє РїСЂРѕСЃСЂРѕС‡РєРё"
+        header = "🔥 Шеф: высокий риск просрочки"
     elif urgency_code == "high":
-        header = "вљ пёЏ РЁРµС„: СЃСЂРѕС‡РЅР°СЏ Р·Р°РґР°С‡Р°"
+        header = "⚠️ Шеф: срочная задача"
     else:
-        header = "рџ’ј РЁРµС„: Р·Р°РґР°С‡Р°"
+        header = "💼 Шеф: задача"
 
     lines = [header, title]
 
@@ -870,7 +882,7 @@ def _build_boss_runtime_message(
         )
 
     lines.append(f"Urgency: {urgency_code}")
-    lines.append("РџРѕРґС‚РІРµСЂРґРёС‚Рµ РІС‹РїРѕР»РЅРµРЅРёРµ РїРѕСЃР»Рµ Р·Р°РєСЂС‹С‚РёСЏ Р·Р°РґР°С‡Рё.")
+    lines.append("Подтвердите выполнение после закрытия задачи.")
     return "\n".join(lines)
 
 
@@ -896,17 +908,17 @@ async def _build_prayer_status_section(session) -> list[str]:
         )
 
         if alert is None:
-            lines.append(f"вЂў {prayer_name}: РЅРµС‚ РґР°РЅРЅС‹С…")
+            lines.append(f"• {prayer_name}: нет данных")
             continue
 
         if alert.status == "done":
-            lines.append(f"вЂў {prayer_name}: РїРѕРґС‚РІРµСЂР¶РґС‘РЅ вњ…")
+            lines.append(f"• {prayer_name}: подтверждён ✅")
         elif alert.status in ("pending", "active", "firing"):
-            lines.append(f"вЂў {prayer_name}: РЅР°РїРѕРјРёРЅР°РЅРёРµ Р°РєС‚РёРІРЅРѕ вЏі")
+            lines.append(f"• {prayer_name}: напоминание активно ⏳")
         elif alert.status == "cancelled":
-            lines.append(f"вЂў {prayer_name}: С†РёРєР» РѕСЃС‚Р°РЅРѕРІР»РµРЅ")
+            lines.append(f"• {prayer_name}: цикл остановлен")
         else:
-            lines.append(f"вЂў {prayer_name}: {alert.status}")
+            lines.append(f"• {prayer_name}: {alert.status}")
 
     return lines
 
@@ -932,7 +944,7 @@ async def _ensure_quran_followup_alert(
         payload_json=json.dumps(
             {
                 "chat_id": chat_id,
-                "text": f"{summary_text}\n\nР’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ:",
+                "text": f"{summary_text}\n\nВыберите действие:",
             },
             ensure_ascii=False,
         ),
