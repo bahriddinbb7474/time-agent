@@ -101,6 +101,7 @@ async def _send_hydration_runtime_ping(*, bot, chat_id: int | None) -> None:
         return
 
     now = datetime.now(APP_TZ)
+    blocked = False
 
     try:
         Session = get_sessionmaker()
@@ -109,9 +110,13 @@ async def _send_hydration_runtime_ping(*, bot, chat_id: int | None) -> None:
                 session=session,
                 now=now,
             )
-        if blocked:
-            return
+    except Exception:
+        log.exception("Hydration gating failed; continuing with send path")
 
+    if blocked:
+        return
+
+    try:
         await bot.send_message(chat_id, "Hydration reminder: drink water.")
     except Exception:
         log.exception("Hydration runtime entry-point failed")
