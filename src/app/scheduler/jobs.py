@@ -90,7 +90,6 @@ async def morning_briefing(bot, scheduler=None) -> None:
         lines.append("• (пока нет)")
 
     if cfg.allowed_telegram_id:
-        await _send_hydration_runtime_ping(bot=bot, chat_id=cfg.allowed_telegram_id)
         await bot.send_message(cfg.allowed_telegram_id, "\n".join(lines))
 
 
@@ -241,6 +240,7 @@ async def evening_summary(bot) -> None:
         lines.append("• Всё закрыто ✅")
 
     if cfg.allowed_telegram_id:
+        await _send_hydration_runtime_ping(bot=bot, chat_id=cfg.allowed_telegram_id)
         await bot.send_message(
             cfg.allowed_telegram_id,
             "\n".join(lines),
