@@ -211,6 +211,21 @@ async def later_cmd(message: Message, session: AsyncSession):
     await message.answer(f"На потом: #{task.id}")
 
 
+@router.message(Command("backlog"))
+async def backlog_cmd(message: Message, session: AsyncSession):
+    items = await TaskService(session).list_later(limit=20)
+
+    if not items:
+        await message.answer("На потом пусто.")
+        return
+
+    lines = ["На потом:"]
+    for item in items:
+        lines.append(f"#{item.id} — {item.title}")
+
+    await message.answer("\n".join(lines))
+
+
 @router.callback_query(F.data.startswith("task_done:"))
 async def task_done_callback(callback: CallbackQuery, session: AsyncSession):
     raw_task_id = (callback.data or "").removeprefix("task_done:")
