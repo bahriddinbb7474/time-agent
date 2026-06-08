@@ -4,7 +4,8 @@
 
 - Stage 6 Stabilization Gate: done.
 - Stage 7 local done/button slice: done.
-- Next stage: Capture Mode + Later Inbox, with remaining lifecycle semantics tracked separately.
+- Stage 8 Capture Mode + Later Inbox: done.
+- Next stage: Prayer Protected Scheduling hardening or Evening Planning Engine, with remaining lifecycle semantics tracked separately.
 
 ## 1. Stabilization Gate
 
@@ -22,9 +23,13 @@
 
 ## 3. Capture Mode + Later Inbox
 
-- Add quick capture for unstructured messages.
-- Add Later Inbox storage and commands.
-- Implement `/later` and inbox review flow.
+- Completed: Later Inbox stored in existing `tasks` table with `status="later"`.
+- Completed: `/later <text>` saves local-only inbox items.
+- Completed: `/backlog` shows Later Inbox items oldest first.
+- Completed: `/boss <text>` creates a fast floating work task.
+- Completed: evening summary shows a short Later Inbox section.
+- Completed: `/add` today/tomorrow parser literals were cleaned up.
+- Remaining: richer inbox review buttons, promotion from Later to scheduled task, and owner approval workflow.
 
 ## 4. Prayer Protected Scheduling
 

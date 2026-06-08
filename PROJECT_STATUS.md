@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 7 Task Lifecycle + Buttons local-done slice is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, and a minimal Telegram done button are now in place.
+Stage 8 Capture Mode + Later Inbox is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, and evening Later review are now in place.
 
 ## Working Features Visible in Code
 
@@ -10,7 +10,7 @@ Stage 7 Task Lifecycle + Buttons local-done slice is complete. The project remai
 - Owner-only access control using `ALLOWED_TELEGRAM_ID`.
 - SQLite persistence through SQLAlchemy async.
 - Default protected slots and routines seeding.
-- Task creation, editing, deletion, local done marking, and daily active listing.
+- Task creation, editing, deletion, local done marking, Later Inbox capture, boss capture, and daily active listing.
 - Context validation for sleep, second sleep, prayer windows, protected slots, and Siyam heavy-load warnings.
 - Google Calendar OAuth, event reads, pull/reconcile, and category-limited write sync.
 - Persistent alert queue with recovery after restart.
@@ -24,6 +24,7 @@ Stage 7 Task Lifecycle + Buttons local-done slice is complete. The project remai
 - Owner-only `/health` command reports safe runtime status.
 - Safe OAuth state smoke test uses an isolated temporary SQLite DB.
 - Safe task status smoke test uses an isolated temporary SQLite DB.
+- Safe Later Inbox smoke test uses an isolated temporary SQLite DB.
 
 ## Broken or Incomplete Parts
 
@@ -34,9 +35,10 @@ Stage 7 Task Lifecycle + Buttons local-done slice is complete. The project remai
 - Migration foundation is documented in `migrations/`; no schema-changing migrations exist yet, and startup still calls `create_all()`.
 - Crisis trigger tries to filter by `Task.user_id`, but `Task` model has no `user_id`; code logs and skips this trigger.
 - Family layer is candidate/log oriented, not a full task lifecycle.
-- Local task `done` is implemented; `later`, `moved`, `skipped`, `postponed`, and `cancelled` task lifecycle semantics are not implemented yet.
+- Local task `done` and Later Inbox `status="later"` capture are implemented; `moved`, `skipped`, `postponed`, and `cancelled` task lifecycle semantics are not implemented yet.
 - Marking a task done is local-only and does not update/delete Google Calendar events.
-- Later Inbox, `/later`, `/focus`, `/backlog`, `/boss`, owner approval workflow, and full evening/morning planning engines are not visible as complete command surfaces.
+- Later Inbox appears in evening summary, but full evening/morning planning engines and owner approval workflow are not complete.
+- `/focus` is not visible as a complete command surface.
 
 ## Production Readiness
 
