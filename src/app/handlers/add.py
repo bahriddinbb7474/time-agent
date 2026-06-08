@@ -290,8 +290,8 @@ def _extract_prayer_name(message_text: str | None) -> str:
 def _build_prayer_shift_message(*, prayer_name: str, suggested_slot_start: datetime) -> str:
     slot_text = suggested_slot_start.strftime("%H:%M")
     return (
-        f"Внимание: на это время выпадает Намаз {prayer_name}.\n"
-        f"Предлагаю сдвинуть задачу на {slot_text}. Согласны?"
+        f"В это время намаз {prayer_name}.\n"
+        f"Не ставлю автоматически. Ближайшее окно: {slot_text}."
     )
 
 def _build_sync_service(
