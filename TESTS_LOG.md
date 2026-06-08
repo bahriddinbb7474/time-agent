@@ -3,14 +3,18 @@
 ## Existing Tests Found
 
 - No pytest/unittest suite found.
-- `src/app/db/test_oauth_state_repo.py` exists, but it is a manual script with `asyncio.run(main())`, not a pytest-style test.
+- `src/app/db/test_oauth_state_repo.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - Handler names `test_brief_cmd` and `test_evening_cmd` are Telegram command handlers, not tests.
 
 ## Tests Run
 
-Not run during this documentation-only pass.
+Safe manual DB smoke command:
 
-Reason: the requested task is documentation-only and no application code was changed. Running the app or tests could require real `.env`, Telegram token, Google credentials, database/network access, or create runtime artifacts.
+```powershell
+$env:PYTHONPATH="src;.venv\Lib\site-packages"; & "C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe" src/app/db/test_oauth_state_repo.py
+```
+
+This command must use a temporary SQLite DB and must not touch `data/app.db`.
 
 ## Missing Critical Tests
 
