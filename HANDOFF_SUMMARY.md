@@ -10,12 +10,13 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Main entrypoint: `src/app/main.py`.
 - Database is initialized on startup with `create_all()` and seed data.
 - Dockerfile and docker-compose are present for long-running bot deployment.
-- README was missing/empty before this documentation pass.
+- Stage 6 Stabilization Gate is complete.
 
 ## What Works in Code
 
 - Owner-only Telegram access.
 - `/start`, `/rules`, `/today`, `/add`, `/edit`, `/delete`.
+- `/health` owner-only runtime status command.
 - Google Calendar OAuth, read today, debug, pull/reconcile, create/update/delete for allowed task categories.
 - Prayer times fetch/cache and prayer reminder alerts.
 - Context validation for sleep, second sleep, prayer, protected slots, and Siyam heavy-load warnings.
@@ -26,14 +27,13 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 
 ## Key Risks
 
-- No real automated test suite found; only a manual OAuth repo script exists under `src/app/db/test_oauth_state_repo.py`.
-- `.env.example` is empty despite required env variables in code.
+- No full automated pytest/unittest suite found.
 - UTF-8 scan found only one real runtime mojibake string in `src/app/main.py`; earlier broad mojibake output was a console decoding artifact.
 - Telegram user-facing Russian strings are readable as UTF-8; `src/app/scheduler/jobs.py` mojibake markers are intentional.
-- SQLite schema is managed by `create_all()` only; no migration system is visible.
+- Migration foundation exists in `migrations/`, but no runner or schema-changing migrations exist yet.
 - Google Calendar sync is partly write-capable, so production use depends on OAuth secrets, token storage, and policy correctness.
 - Crisis mode references `Task.user_id`, but the current `Task` model has no `user_id` column, so that path is effectively skipped.
 
 ## Next Priority
 
-Stabilization Gate: fix config/docs mismatch, add smoke tests for startup/imports, cover task lifecycle and context validation, and keep UTF-8 checks in place before expanding features.
+Stage 7 Task Lifecycle + Buttons: complete task status transitions, owner-safe buttons, and focused tests around task create/edit/delete flows.

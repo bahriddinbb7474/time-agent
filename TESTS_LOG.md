@@ -32,6 +32,18 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 
 `/health` was added as an owner-only Telegram command. Bot was not started; verification is limited to `py_compile` and safe source search.
 
+## Stage 6 Closeout Verification
+
+- Root info docs exist.
+- The old mojibake `Starting bot` log variant is absent.
+- `.env.example` contains placeholder-only values; no real secrets found.
+- OAuth state smoke test passed with an isolated temporary SQLite DB.
+- `data/app.db` timestamp was unchanged by the smoke test.
+- Migration foundation files exist under `migrations/`.
+- `ENABLE_DEBUG_COMMANDS` gates debug/test commands.
+- `/health` is registered and documented.
+- Bot was not started.
+
 ## Missing Critical Tests
 
 - Import smoke test for all app modules.

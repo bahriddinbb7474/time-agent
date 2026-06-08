@@ -1,12 +1,14 @@
 # Roadmap to Time-Agent v1
 
+## Stage Status
+
+- Stage 6 Stabilization Gate: done.
+- Next stage: Stage 7 Task Lifecycle + Buttons.
+
 ## 1. Stabilization Gate
 
-- Fix documentation/config mismatch, especially `.env.example`.
-- Add smoke tests for imports, startup configuration, DB initialization, and scheduler construction.
-- Keep UTF-8 checks for Russian Telegram messages; avoid treating Windows console decoding artifacts as source corruption.
-- Verify alert queue recovery and idempotent send behavior.
-- Add a migration runner or make an explicit Alembic decision before production schema changes; `create_all()` remains startup safety only.
+- Completed: root docs, mojibake fix, `.env.example`, safe test DB, migration foundation, debug gates, Docker/env audit, and `/health` baseline.
+- Remaining later: broader smoke/import tests, alert recovery verification, and a migration runner or Alembic decision before production schema changes.
 
 ## 2. Task Lifecycle + Buttons
 

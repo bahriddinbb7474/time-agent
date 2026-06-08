@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Prototype / pre-production stabilization. The project has meaningful feature code, persistent storage, scheduler recovery, and Docker files, but lacks a visible automated test suite and has configuration/documentation gaps.
+Stage 6 Stabilization Gate is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, and `/health` baseline are now in place.
 
 ## Working Features Visible in Code
 
@@ -22,10 +22,11 @@ Prototype / pre-production stabilization. The project has meaningful feature cod
 - Boss/critical alert loop for marked urgent tasks.
 - Production debug/test commands are gated by `ENABLE_DEBUG_COMMANDS`.
 - Owner-only `/health` command reports safe runtime status.
+- Safe OAuth state smoke test uses an isolated temporary SQLite DB.
 
 ## Broken or Incomplete Parts
 
-- No proper test suite found.
+- No full pytest/unittest suite found.
 - `.env.example` contains placeholder-only runtime values; no real secrets should be committed.
 - UTF-8 scan found only one real runtime mojibake string in `src/app/main.py`; most previous mojibake output was a console decoding artifact.
 - Telegram user-facing Russian strings are readable as UTF-8; `src/app/scheduler/jobs.py` mojibake marker strings are intentional.
@@ -51,7 +52,7 @@ Docker/env/secrets safe now:
 
 Blocking items:
 
-- Add smoke/import tests and core behavior tests.
+- Add Stage 7 task lifecycle/button coverage and smoke/import tests.
 - Keep UTF-8 checks for Telegram messages and avoid reading source through Windows Default encoding.
 - Add a migration runner or Alembic decision before production schema evolution.
 - Validate Google OAuth/token paths and Docker volume setup on target VPS.
