@@ -58,6 +58,23 @@ async def create_task(
     return task
 
 
+async def create_later_task(session: AsyncSession, title: str) -> Task:
+    task = Task(
+        title=title,
+        planned_at=None,
+        duration_min=30,
+        category="other",
+        context_status="normal",
+        status="later",
+        created_at=now_tz(),
+    )
+
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
 async def get_task(session: AsyncSession, task_id: int) -> Task | None:
     stmt = select(Task).where(Task.id == task_id)
     res = await session.execute(stmt)
@@ -136,6 +153,18 @@ async def list_floating_tasks(session: AsyncSession) -> list[Task]:
         .where(Task.planned_at.is_(None))
         .where(Task.status == "todo")
         .order_by(Task.id.asc())
+    )
+
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
+async def list_later_tasks(session: AsyncSession, limit: int = 20) -> list[Task]:
+    stmt = (
+        select(Task)
+        .where(Task.status == "later")
+        .order_by(Task.created_at.asc(), Task.id.asc())
+        .limit(limit)
     )
 
     res = await session.execute(stmt)

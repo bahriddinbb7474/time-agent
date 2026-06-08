@@ -3,7 +3,6 @@ import os
 import tempfile
 from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
@@ -11,8 +10,7 @@ windows_zoneinfo = Path(r"C:\Program Files\Git\mingw64\share\zoneinfo")
 if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
     os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
 
-from app.core.time import now_tz
-from app.db.models import Base, Task
+from app.db.models import Base
 from app.services.task_service import TaskService
 
 
@@ -30,31 +28,18 @@ async def main():
             await conn.run_sync(Base.metadata.create_all)
 
         async with Session() as session:
-            later_task = Task(
-                title="Review passport renewal",
-                planned_at=None,
-                duration_min=30,
-                status="later",
-                category="other",
-                context_status="normal",
-                created_at=now_tz(),
-            )
-            session.add(later_task)
-            await session.commit()
-            await session.refresh(later_task)
+            service = TaskService(session)
+            later_task = await service.create_later("Review passport renewal")
 
             assert later_task.status == "later"
             assert later_task.planned_at is None
+            assert later_task.duration_min == 30
+            assert later_task.category == "other"
 
-            result = await session.execute(
-                select(Task)
-                .where(Task.status == "later")
-                .order_by(Task.created_at.asc(), Task.id.asc())
-            )
-            later_items = list(result.scalars().all())
+            later_items = await service.list_later()
             assert [item.title for item in later_items] == ["Review passport renewal"]
 
-            timed, floating = await TaskService(session).list_today()
+            timed, floating = await service.list_today()
             active_ids = {item.id for item in timed + floating}
             assert later_task.id not in active_ids
 

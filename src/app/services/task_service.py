@@ -114,6 +114,14 @@ class TaskService:
             return None
         return self._to_dto(task)
 
+    async def create_later(self, title: str) -> TaskDTO:
+        task = await crud.create_later_task(self.session, title=title)
+        return self._to_dto(task)
+
+    async def list_later(self, limit: int = 20) -> list[TaskDTO]:
+        tasks = await crud.list_later_tasks(self.session, limit=limit)
+        return [self._to_dto(t, time_only=True) for t in tasks]
+
     async def list_today(self) -> tuple[list[TaskDTO], list[TaskDTO]]:
         now = now_tz()
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
