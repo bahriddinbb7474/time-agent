@@ -83,6 +83,25 @@ Typical command supported by existing files:
 docker compose up --build
 ```
 
+## Docker / Env / Secrets Audit
+
+Safe now:
+
+- Container runs as non-root `appuser`.
+- `TZ` defaults to `Asia/Tashkent`; Docker installs `tzdata`.
+- SQLite persists under `/app/data`, backed by the `app_data` volume.
+- Logs mount to `./logs`; file logging is opt-in with `LOG_TO_FILE=1`.
+- Google OAuth credentials are expected as a read-only mounted JSON file.
+- Google token path is configurable and should point into persisted `/app/data`.
+- Debug/test commands are disabled by default with `ENABLE_DEBUG_COMMANDS=false`.
+
+Not ready yet:
+
+- No Docker healthcheck/heartbeat is configured.
+- No documented backup/restore routine for SQLite DB or Google token.
+- OAuth redirect URI must be validated for the target VPS domain/port.
+- Secrets path `C:/time-agent-secrets` is Windows-host specific and must be adapted for VPS.
+
 ## Telegram Commands Visible in Code
 
 - `/start`

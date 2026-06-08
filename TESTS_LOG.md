@@ -24,6 +24,10 @@ No migration was run. The migration foundation is documentation-only and must no
 
 `/test_brief`, `/test_evening`, and `/gcal_debug` are gated by `ENABLE_DEBUG_COMMANDS=false` by default.
 
+## Docker / Env / Secrets Audit Verification
+
+Safe inspection only. Bot was not started, migrations were not run, and `data/app.db` was not modified.
+
 ## Missing Critical Tests
 
 - Import smoke test for all app modules.

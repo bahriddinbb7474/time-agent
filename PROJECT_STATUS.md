@@ -25,7 +25,7 @@ Prototype / pre-production stabilization. The project has meaningful feature cod
 ## Broken or Incomplete Parts
 
 - No proper test suite found.
-- `.env.example` is empty.
+- `.env.example` contains placeholder-only runtime values; no real secrets should be committed.
 - UTF-8 scan found only one real runtime mojibake string in `src/app/main.py`; most previous mojibake output was a console decoding artifact.
 - Telegram user-facing Russian strings are readable as UTF-8; `src/app/scheduler/jobs.py` mojibake marker strings are intentional.
 - Migration foundation is documented in `migrations/`; no schema-changing migrations exist yet, and startup still calls `create_all()`.
@@ -37,11 +37,24 @@ Prototype / pre-production stabilization. The project has meaningful feature cod
 
 Not production-ready yet.
 
+Docker/env/secrets safe now:
+
+- Docker runs the bot as non-root `appuser`.
+- `/app/data` is persisted through the `app_data` volume.
+- `./logs` is mounted to `/app/logs`; file logging remains opt-in.
+- `/run/secrets` is mounted read-only from the host.
+- Google credentials/token paths are configurable through env.
+- `TZ=Asia/Tashkent` is set in Compose and supported by container `tzdata`.
+- `restart: always` is configured.
+- Debug/test commands default to disabled.
+
 Blocking items:
 
-- Add configuration examples without secrets.
 - Add smoke/import tests and core behavior tests.
 - Keep UTF-8 checks for Telegram messages and avoid reading source through Windows Default encoding.
 - Add a migration runner or Alembic decision before production schema evolution.
 - Validate Google OAuth/token paths and Docker volume setup on target VPS.
+- Add Docker healthcheck or external heartbeat/monitoring.
+- Document SQLite and Google token backup/restore.
+- Replace Windows-specific secrets mount with VPS-specific path.
 - Verify scheduler recovery and alert idempotency under restart.

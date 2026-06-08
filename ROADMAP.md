@@ -66,8 +66,11 @@
 
 ## 11. VPS Production 24/7
 
-- Finalize `.env.example`, secrets paths, volumes, restart policy, logging, and backup notes.
+- Adapt secrets path for VPS and verify `/run/secrets` read-only mount.
+- Keep `/app/data` persistent and document SQLite/token backup and restore.
+- Add Docker healthcheck or external heartbeat/monitoring.
 - Verify OAuth callback port and redirect URI.
+- Confirm `TZ=Asia/Tashkent`, `ENABLE_DEBUG_COMMANDS=false`, logging mode, and restart policy.
 - Add operational smoke checklist.
 
 ## 12. Voice Capture v1.1
