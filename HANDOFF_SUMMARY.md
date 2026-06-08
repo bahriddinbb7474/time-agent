@@ -11,11 +11,13 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Database is initialized on startup with `create_all()` and seed data.
 - Dockerfile and docker-compose are present for long-running bot deployment.
 - Stage 6 Stabilization Gate is complete.
+- Stage 7 local done/button slice is complete.
 
 ## What Works in Code
 
 - Owner-only Telegram access.
-- `/start`, `/rules`, `/today`, `/add`, `/edit`, `/delete`.
+- `/start`, `/rules`, `/today`, `/add`, `/edit`, `/delete`, `/done`.
+- Minimal `✅ Сделал` button from `/today` marks tasks done through `task_done:<id>`.
 - `/health` owner-only runtime status command.
 - Google Calendar OAuth, read today, debug, pull/reconcile, create/update/delete for allowed task categories.
 - Prayer times fetch/cache and prayer reminder alerts.
@@ -32,8 +34,10 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Telegram user-facing Russian strings are readable as UTF-8; `src/app/scheduler/jobs.py` mojibake markers are intentional.
 - Migration foundation exists in `migrations/`, but no runner or schema-changing migrations exist yet.
 - Google Calendar sync is partly write-capable, so production use depends on OAuth secrets, token storage, and policy correctness.
+- Marking tasks done is local-only; Google Calendar lifecycle behavior for done/cancelled/later is not implemented.
+- Boss alert cleanup on task done is still a follow-up.
 - Crisis mode references `Task.user_id`, but the current `Task` model has no `user_id` column, so that path is effectively skipped.
 
 ## Next Priority
 
-Stage 7 Task Lifecycle + Buttons: complete task status transitions, owner-safe buttons, and focused tests around task create/edit/delete flows.
+Capture Mode + Later Inbox, while tracking remaining lifecycle work: later/postpone/cancel semantics, richer buttons, boss alert cleanup on done, and Google Calendar lifecycle policy.

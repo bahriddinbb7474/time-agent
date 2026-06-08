@@ -3,7 +3,8 @@
 ## Stage Status
 
 - Stage 6 Stabilization Gate: done.
-- Next stage: Stage 7 Task Lifecycle + Buttons.
+- Stage 7 local done/button slice: done.
+- Next stage: Capture Mode + Later Inbox, with remaining lifecycle semantics tracked separately.
 
 ## 1. Stabilization Gate
 
@@ -12,9 +13,12 @@
 
 ## 2. Task Lifecycle + Buttons
 
-- Complete task status lifecycle: todo, done, cancelled, postponed.
-- Add Telegram inline buttons for done, postpone, reschedule, delete, and edit flows.
-- Ensure Google external link state follows local lifecycle.
+- Completed: safe temp-DB task status smoke test.
+- Completed: local-only `done` status update.
+- Completed: `/done <id>` command.
+- Completed: `/today` hides `done` and `cancelled` tasks from active timed/floating lists.
+- Completed: minimal Telegram `✅ Сделал` button using `task_done:<id>`.
+- Remaining: postponed/later/cancelled semantics, edit/delete/reschedule buttons, boss alert cleanup on task done, and Google Calendar lifecycle policy.
 
 ## 3. Capture Mode + Later Inbox
 
