@@ -8,6 +8,19 @@ from typing import Awaitable, Callable, Iterable
 from app.core.time import APP_TZ
 from app.db import crud
 from app.services.daily_context_service import DailyContextPolicy, DailyContextService
+from app.services.prayer_protection import (
+    DHUHR_DEAD_ZONE_END,
+    DHUHR_DEAD_ZONE_SHIFT_TO,
+    DHUHR_DEAD_ZONE_START,
+    PRAYER_BLOCK_AFTER_MIN,
+    PRAYER_BUFFER_BEFORE_MIN,
+    PRAYER_SUGGESTION_BUFFER_MIN,
+    build_dhuhr_dead_zone,
+    build_dhuhr_shift_start,
+    intervals_overlap,
+    is_dhuhr_dead_zone_overlap,
+    iter_prayer_protected_windows,
+)
 from app.services.prayer_times_service import PrayerTimesService
 from app.services.routine_service import RoutineService
 from app.services.rules_service import RulesService
@@ -46,14 +59,14 @@ class ContextValidator:
     SEARCH_STEP_MIN = 15
     SEARCH_LIMIT_HOURS = 24
 
-    PRAYER_BUFFER_BEFORE_MIN = 15
-    PRAYER_BLOCK_AFTER_MIN = 20
+    PRAYER_BUFFER_BEFORE_MIN = PRAYER_BUFFER_BEFORE_MIN
+    PRAYER_BLOCK_AFTER_MIN = PRAYER_BLOCK_AFTER_MIN
     SUGGESTION_BUFFER_MIN = 15
-    PRAYER_SUGGESTION_BUFFER_MIN = 20
+    PRAYER_SUGGESTION_BUFFER_MIN = PRAYER_SUGGESTION_BUFFER_MIN
 
-    DHUHR_DEAD_ZONE_START = time(13, 0)
-    DHUHR_DEAD_ZONE_END = time(13, 20)
-    DHUHR_DEAD_ZONE_SHIFT_TO = time(13, 25)
+    DHUHR_DEAD_ZONE_START = DHUHR_DEAD_ZONE_START
+    DHUHR_DEAD_ZONE_END = DHUHR_DEAD_ZONE_END
+    DHUHR_DEAD_ZONE_SHIFT_TO = DHUHR_DEAD_ZONE_SHIFT_TO
 
     SIYAM_HEAVY_CATEGORIES = {"health", "workout", "heavy_activity"}
 
@@ -288,38 +301,16 @@ class ContextValidator:
         for day in self._iter_dates(start_at.date(), end_at.date()):
             prayer_times = await self.prayer_times_service.get_prayer_times(day)
 
-            prayer_points = [
-                ("Fajr", prayer_times.fajr),
-                ("Dhuhr", prayer_times.dhuhr),
-                ("Asr", prayer_times.asr),
-                ("Maghrib", prayer_times.maghrib),
-                ("Isha", prayer_times.isha),
-            ]
-
-            for prayer_name, prayer_time in prayer_points:
-                prayer_at = datetime.combine(day, prayer_time, tzinfo=APP_TZ)
-                protected_start = prayer_at - timedelta(
-                    minutes=self.PRAYER_BUFFER_BEFORE_MIN
-                )
-                protected_end = prayer_at + timedelta(
-                    minutes=self.PRAYER_BLOCK_AFTER_MIN
-                )
-
-                if prayer_name.lower() == "dhuhr" and self._is_dhuhr_dead_zone_overlap(
+            for window in iter_prayer_protected_windows(
+                day=day,
+                prayer_times=prayer_times,
+            ):
+                if window.prayer_name.lower() == "dhuhr" and self._is_dhuhr_dead_zone_overlap(
                     start_at=start_at,
                     end_at=end_at,
                     day=day,
                 ):
-                    dead_zone_start = datetime.combine(
-                        day,
-                        self.DHUHR_DEAD_ZONE_START,
-                        tzinfo=APP_TZ,
-                    )
-                    dead_zone_end = datetime.combine(
-                        day,
-                        self.DHUHR_DEAD_ZONE_END,
-                        tzinfo=APP_TZ,
-                    )
+                    dead_zone_start, dead_zone_end = build_dhuhr_dead_zone(day=day)
                     return ConflictWindow(
                         conflict_type=ConflictType.PRAYER,
                         reason_code="dhuhr_dead_zone",
@@ -332,22 +323,22 @@ class ContextValidator:
                 if self._intervals_overlap(
                     start_at,
                     end_at,
-                    protected_start,
-                    protected_end,
+                    window.start,
+                    window.end,
                 ):
                     if await self._is_prayer_slot_completed(
                         day=day,
-                        prayer_name=prayer_name,
+                        prayer_name=window.prayer_name,
                     ):
                         continue
 
                     return ConflictWindow(
                         conflict_type=ConflictType.PRAYER,
                         reason_code="prayer_conflict",
-                        message=f"В это время намаз {prayer_name}.",
+                        message=f"В это время намаз {window.prayer_name}.",
                         severity=ValidationSeverity.WARNING,
-                        start=protected_start,
-                        end=protected_end,
+                        start=window.start,
+                        end=window.end,
                     )
 
         return None
@@ -359,20 +350,14 @@ class ContextValidator:
         end_at: datetime,
         day: date,
     ) -> bool:
-        dead_zone_start = datetime.combine(
-            day,
-            self.DHUHR_DEAD_ZONE_START,
-            tzinfo=APP_TZ,
+        return is_dhuhr_dead_zone_overlap(
+            start_at=start_at,
+            end_at=end_at,
+            day=day,
         )
-        dead_zone_end = datetime.combine(
-            day,
-            self.DHUHR_DEAD_ZONE_END,
-            tzinfo=APP_TZ,
-        )
-        return self._intervals_overlap(start_at, end_at, dead_zone_start, dead_zone_end)
 
     def _build_dhuhr_dead_zone_shift_start(self, *, day: date) -> datetime:
-        return datetime.combine(day, self.DHUHR_DEAD_ZONE_SHIFT_TO, tzinfo=APP_TZ)
+        return build_dhuhr_shift_start(day=day)
 
     async def _is_prayer_slot_completed(
         self,
@@ -644,7 +629,7 @@ class ContextValidator:
         start_b: datetime,
         end_b: datetime,
     ) -> bool:
-        return start_a < end_b and start_b < end_a
+        return intervals_overlap(start_a, end_a, start_b, end_b)
 
     @staticmethod
     def _iter_dates(start_date: date, end_date: date) -> Iterable[date]:
