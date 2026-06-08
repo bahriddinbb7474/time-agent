@@ -174,7 +174,9 @@ async def evening_summary(bot) -> None:
     cfg = load_config()
 
     async with Session() as session:
-        timed, floating = await TaskService(session).list_today()
+        task_service = TaskService(session)
+        timed, floating = await task_service.list_today()
+        later_items = await task_service.list_later(limit=5)
         quran_service = QuranService(session)
         quran_summary = await quran_service.get_daily_summary()
         prayer_section = await _build_prayer_status_section(session)
@@ -238,6 +240,14 @@ async def evening_summary(bot) -> None:
                 lines.append(f"• #{t.id} — {t.title} [{t.status}]")
     else:
         lines.append("• Всё закрыто ✅")
+
+    lines.append("\n📝 На потом")
+    if later_items:
+        lines.append(f"• Всего в обзоре: {len(later_items)}. Посмотреть: /backlog")
+        for item in later_items:
+            lines.append(f"• #{item.id} — {item.title}")
+    else:
+        lines.append("• Пусто.")
 
     if cfg.allowed_telegram_id:
         await _send_hydration_runtime_ping(bot=bot, chat_id=cfg.allowed_telegram_id)
