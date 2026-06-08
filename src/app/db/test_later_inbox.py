@@ -1,6 +1,7 @@
 import asyncio
 import os
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -10,7 +11,9 @@ windows_zoneinfo = Path(r"C:\Program Files\Git\mingw64\share\zoneinfo")
 if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
     os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
 
+from app.core.time import now_tz
 from app.db.models import Base
+from app.handlers.add import parse_add_payload
 from app.services.task_service import TaskService
 
 
@@ -42,6 +45,13 @@ async def main():
             timed, floating = await service.list_today()
             active_ids = {item.id for item in timed + floating}
             assert later_task.id not in active_ids
+
+            _category, title, planned_at, _duration = parse_add_payload(
+                "work Позвонить завтра 14:00"
+            )
+            assert title == "Позвонить"
+            assert planned_at is not None
+            assert planned_at.date() == now_tz().date() + timedelta(days=1)
 
         await engine.dispose()
 

@@ -111,11 +111,11 @@ def parse_add_payload(text: str) -> tuple[str, str, datetime | None, int]:
         base = now_tz().date()
         raw_lower = raw.lower()
 
-        if "Р·Р°РІС‚СЂР°" in raw_lower:
+        if "завтра" in raw_lower:
             base = base + timedelta(days=1)
-            raw = re.sub(r"\bР·Р°РІС‚СЂР°\b", "", raw, flags=re.IGNORECASE)
-        elif "СЃРµРіРѕРґРЅСЏ" in raw_lower:
-            raw = re.sub(r"\bСЃРµРіРѕРґРЅСЏ\b", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"\bзавтра\b", "", raw, flags=re.IGNORECASE)
+        elif "сегодня" in raw_lower:
+            raw = re.sub(r"\bсегодня\b", "", raw, flags=re.IGNORECASE)
 
         raw = re.sub(r"\s+", " ", raw.replace(matched_token, "", 1)).strip()
 
