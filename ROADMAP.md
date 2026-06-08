@@ -68,7 +68,7 @@
 
 - Adapt secrets path for VPS and verify `/run/secrets` read-only mount.
 - Keep `/app/data` persistent and document SQLite/token backup and restore.
-- Add Docker healthcheck or external heartbeat/monitoring.
+- Add Docker healthcheck or external heartbeat/monitoring around the Telegram `/health` baseline.
 - Verify OAuth callback port and redirect URI.
 - Confirm `TZ=Asia/Tashkent`, `ENABLE_DEBUG_COMMANDS=false`, logging mode, and restart policy.
 - Add operational smoke checklist.

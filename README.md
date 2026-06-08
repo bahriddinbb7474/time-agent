@@ -105,6 +105,7 @@ Not ready yet:
 ## Telegram Commands Visible in Code
 
 - `/start`
+- `/health`
 - `/rules`
 - `/today`
 - `/add`
@@ -124,6 +125,8 @@ Not ready yet:
 - `/test_evening`
 
 Debug/test commands `/test_brief`, `/test_evening`, and `/gcal_debug` only run when `ENABLE_DEBUG_COMMANDS=true`.
+
+`/health` returns a short owner-only runtime check: process alive, timezone, debug flag, DB read status, and scheduler job count.
 
 ## Testing
 

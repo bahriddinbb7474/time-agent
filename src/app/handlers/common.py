@@ -6,6 +6,8 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import load_config
 from app.core.time import APP_TZ
@@ -33,6 +35,38 @@ async def start_cmd(message: Message) -> None:
         "• /start - эта справка\n"
     )
     await message.answer(text)
+
+
+@router.message(Command("health"))
+async def health_cmd(
+    message: Message,
+    session: AsyncSession,
+    scheduler: AsyncIOScheduler,
+) -> None:
+    cfg = load_config()
+
+    try:
+        await session.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:
+        logger.exception("Health DB check failed")
+        db_status = "fail"
+
+    scheduler_status = "running" if scheduler and scheduler.running else "stopped"
+    jobs_count = len(scheduler.get_jobs()) if scheduler else 0
+    debug_status = "on" if cfg.enable_debug_commands else "off"
+
+    await message.answer(
+        "\n".join(
+            [
+                "Health: ok",
+                f"TZ: {APP_TZ.key}",
+                f"Debug: {debug_status}",
+                f"DB: {db_status}",
+                f"Scheduler: {scheduler_status} ({jobs_count} jobs)",
+            ]
+        )
+    )
 
 
 @router.message(Command("test_brief"))

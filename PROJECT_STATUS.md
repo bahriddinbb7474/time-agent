@@ -21,6 +21,7 @@ Prototype / pre-production stabilization. The project has meaningful feature cod
 - Family contact reminder candidates without auto-creation.
 - Boss/critical alert loop for marked urgent tasks.
 - Production debug/test commands are gated by `ENABLE_DEBUG_COMMANDS`.
+- Owner-only `/health` command reports safe runtime status.
 
 ## Broken or Incomplete Parts
 
@@ -55,6 +56,7 @@ Blocking items:
 - Add a migration runner or Alembic decision before production schema evolution.
 - Validate Google OAuth/token paths and Docker volume setup on target VPS.
 - Add Docker healthcheck or external heartbeat/monitoring.
+- Extend health checks with external heartbeat if needed.
 - Document SQLite and Google token backup/restore.
 - Replace Windows-specific secrets mount with VPS-specific path.
 - Verify scheduler recovery and alert idempotency under restart.

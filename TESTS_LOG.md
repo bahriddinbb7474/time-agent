@@ -28,6 +28,10 @@ No migration was run. The migration foundation is documentation-only and must no
 
 Safe inspection only. Bot was not started, migrations were not run, and `data/app.db` was not modified.
 
+## Health Command Verification
+
+`/health` was added as an owner-only Telegram command. Bot was not started; verification is limited to `py_compile` and safe source search.
+
 ## Missing Critical Tests
 
 - Import smoke test for all app modules.
