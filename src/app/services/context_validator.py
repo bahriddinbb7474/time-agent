@@ -299,7 +299,7 @@ class ContextValidator:
         and lasts 20 min after prayer start.
         """
         for day in self._iter_dates(start_at.date(), end_at.date()):
-            prayer_times = await self.prayer_times_service.get_prayer_times(day)
+            prayer_times = await self._get_prayer_times_for_validation(day)
 
             for window in iter_prayer_protected_windows(
                 day=day,
@@ -342,6 +342,19 @@ class ContextValidator:
                     )
 
         return None
+
+    async def _get_prayer_times_for_validation(self, day: date):
+        cached_getter = getattr(
+            self.prayer_times_service,
+            "get_cached_prayer_times",
+            None,
+        )
+        if cached_getter is not None:
+            cached_prayer_times = await cached_getter(day)
+            if cached_prayer_times is not None:
+                return cached_prayer_times
+
+        return await self.prayer_times_service.get_prayer_times(day)
 
     def _is_dhuhr_dead_zone_overlap(
         self,

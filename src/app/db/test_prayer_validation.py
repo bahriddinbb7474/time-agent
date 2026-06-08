@@ -12,7 +12,7 @@ if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
     os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
 
 from app.core.time import APP_TZ
-from app.db.models import AlertQueue, Base
+from app.db.models import AlertQueue, Base, PrayerTime
 from app.services.context_validator import ContextValidator
 from app.services.prayer_times_service import PrayerTimesDTO, PrayerTimesService
 from app.services.validation_result import ConflictType, ValidationStatus
@@ -44,6 +44,11 @@ class FakePrayerTimesService:
             maghrib=time(18, 30, tzinfo=APP_TZ),
             isha=time(20, 0, tzinfo=APP_TZ),
         )
+
+
+class NoFetchPrayerTimesService(PrayerTimesService):
+    async def fetch_month(self, target_date):
+        raise AssertionError("validator should use cached prayer times")
 
 
 def at(day: date, hour: int, minute: int) -> datetime:
@@ -114,6 +119,30 @@ async def main():
                 duration_min=20,
             )
             assert completed_asr_result.status == ValidationStatus.VALID
+
+            session.add(
+                PrayerTime(
+                    date=date(2026, 6, 10),
+                    fajr=time(5, 0, tzinfo=APP_TZ),
+                    dhuhr=time(12, 30, tzinfo=APP_TZ),
+                    asr=time(15, 0, tzinfo=APP_TZ),
+                    maghrib=time(18, 30, tzinfo=APP_TZ),
+                    isha=time(20, 0, tzinfo=APP_TZ),
+                    created_at=at(target_day, 4, 0),
+                )
+            )
+            await session.commit()
+
+            cached_validator = ContextValidator(
+                routine_service=FakeRoutineService(),
+                prayer_times_service=NoFetchPrayerTimesService(session),
+                rules_service=FakeRulesService(),
+            )
+            cached_result = await cached_validator.validate_event(
+                start_at=at(date(2026, 6, 10), 14, 50),
+                duration_min=20,
+            )
+            assert cached_result.reason_code == "prayer_conflict"
 
         await engine.dispose()
 
