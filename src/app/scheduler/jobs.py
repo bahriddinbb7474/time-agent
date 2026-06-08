@@ -13,6 +13,10 @@ from app.services.boss_priority_service import BossPriorityService
 from app.services.family_contact_service import FamilyContactService
 from app.services.daily_context_service import DailyContextService
 from app.services.prayer_times_service import PrayerTimesService
+from app.services.prayer_protection import (
+    intervals_overlap,
+    iter_prayer_protected_windows,
+)
 from app.services.quran_service import QuranService
 from app.services.routine_service import RoutineService
 from app.services.rules_service import RulesService
@@ -105,6 +109,9 @@ async def _send_hydration_runtime_ping(*, bot, chat_id: int | None) -> None:
     try:
         Session = get_sessionmaker()
         async with Session() as session:
+            if await _is_prayer_quiet_now(session=session, now=now):
+                return
+
             blocked = await _is_hydration_blocked_by_siyam_daylight(
                 session=session,
                 now=now,
@@ -133,6 +140,28 @@ async def _is_hydration_blocked_by_siyam_daylight(*, session, now: datetime) -> 
     maghrib_at = datetime.combine(target_date, prayer_times.maghrib, tzinfo=APP_TZ)
 
     return fajr_at <= now < maghrib_at
+
+
+async def _is_prayer_quiet_now(*, session, now: datetime) -> bool:
+    quiet_until = await _resolve_prayer_quiet_until(session=session, now=now)
+    return quiet_until is not None
+
+
+async def _resolve_prayer_quiet_until(*, session, now: datetime) -> datetime | None:
+    prayer_times_service = PrayerTimesService(session)
+    cached_prayer_times = await prayer_times_service.get_cached_prayer_times(now.date())
+    if cached_prayer_times is None:
+        return None
+
+    probe_end = now + timedelta(seconds=1)
+    for window in iter_prayer_protected_windows(
+        day=now.date(),
+        prayer_times=cached_prayer_times,
+    ):
+        if intervals_overlap(now, probe_end, window.start, window.end):
+            return window.end + timedelta(minutes=1)
+
+    return None
 
 
 async def family_daily_check_job(bot=None) -> None:
@@ -621,6 +650,7 @@ async def _handle_boss_critical(session, alert: AlertQueue, bot, scheduler) -> N
 
 async def _handle_quran_followup(session, alert: AlertQueue, bot, scheduler) -> None:
     payload = _load_payload(alert.payload_json)
+    now = datetime.now(APP_TZ)
     chat_id = payload.get("chat_id")
     safe_fallback_text = "📖 Напоминание по Корану.\nВыберите действие:"
     raw_text = payload.get("text")
@@ -640,6 +670,22 @@ async def _handle_quran_followup(session, alert: AlertQueue, bot, scheduler) -> 
         await crud.finalize_firing_alert(session, alert_id=alert.id, status="failed")
         return
 
+    quiet_until = await _resolve_prayer_quiet_until(session=session, now=now)
+    if quiet_until is not None:
+        payload["quieted_by_prayer"] = True
+        success = await crud.reschedule_firing_alert(
+            session,
+            alert_id=alert.id,
+            scheduled_for=quiet_until,
+            payload_json=json.dumps(payload, ensure_ascii=False),
+        )
+        if success:
+            _schedule_same_alert(
+                alert_id=alert.id,
+                scheduled_for=quiet_until,
+                scheduler=scheduler,
+                bot=bot,
+            )
         return
 
     keyboard = InlineKeyboardMarkup(

@@ -144,6 +144,14 @@ async def main():
             )
             assert cached_result.reason_code == "prayer_conflict"
 
+            from app.scheduler.jobs import _resolve_prayer_quiet_until
+
+            quiet_until = await _resolve_prayer_quiet_until(
+                session=session,
+                now=at(date(2026, 6, 10), 14, 50),
+            )
+            assert quiet_until == at(date(2026, 6, 10), 15, 21)
+
         await engine.dispose()
 
     print("PASS: Prayer validation uses isolated temp SQLite DB")
