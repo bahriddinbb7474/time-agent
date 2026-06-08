@@ -22,4 +22,5 @@
 ## Notes
 
 - Root `.env.example` is empty, while code expects several environment variables.
-- Many Russian user-facing strings in source files appear mojibake-encoded, which is a product-readiness risk.
+- UTF-8 scan found only one real runtime mojibake string in `src/app/main.py`; Telegram user-facing Russian strings are readable when files are read as UTF-8.
+- Mojibake marker strings in `src/app/scheduler/jobs.py` are intentional fallback detection and must not be removed.

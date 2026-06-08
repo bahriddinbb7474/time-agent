@@ -52,7 +52,7 @@ async def main() -> None:
     setup_logging()
     cfg = load_config()
 
-    log.info("Starting botвЂ¦ TZ=%s allowed_id=%s", cfg.tz, cfg.allowed_telegram_id)
+    log.info("Starting bot... TZ=%s allowed_id=%s", cfg.tz, cfg.allowed_telegram_id)
 
     await init_db()
 

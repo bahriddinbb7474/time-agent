@@ -4,7 +4,7 @@
 
 - Fix documentation/config mismatch, especially `.env.example`.
 - Add smoke tests for imports, startup configuration, DB initialization, and scheduler construction.
-- Fix or confirm source encoding for Russian Telegram messages.
+- Keep UTF-8 checks for Russian Telegram messages; avoid treating Windows console decoding artifacts as source corruption.
 - Verify alert queue recovery and idempotent send behavior.
 - Decide whether `create_all()` remains acceptable or migrations are needed.
 

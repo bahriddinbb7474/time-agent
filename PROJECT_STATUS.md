@@ -25,7 +25,8 @@ Prototype / pre-production stabilization. The project has meaningful feature cod
 
 - No proper test suite found.
 - `.env.example` is empty.
-- User-facing Russian text in many Python files appears mojibake-encoded.
+- UTF-8 scan found only one real runtime mojibake string in `src/app/main.py`; most previous mojibake output was a console decoding artifact.
+- Telegram user-facing Russian strings are readable as UTF-8; `src/app/scheduler/jobs.py` mojibake marker strings are intentional.
 - No DB migration tool is visible; schema changes rely on `create_all()`.
 - Crisis trigger tries to filter by `Task.user_id`, but `Task` model has no `user_id`; code logs and skips this trigger.
 - Family layer is candidate/log oriented, not a full task lifecycle.
@@ -39,7 +40,7 @@ Blocking items:
 
 - Add configuration examples without secrets.
 - Add smoke/import tests and core behavior tests.
-- Fix or verify source encoding for Telegram messages.
+- Keep UTF-8 checks for Telegram messages and avoid reading source through Windows Default encoding.
 - Decide migration strategy.
 - Validate Google OAuth/token paths and Docker volume setup on target VPS.
 - Verify scheduler recovery and alert idempotency under restart.

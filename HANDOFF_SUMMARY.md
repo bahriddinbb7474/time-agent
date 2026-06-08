@@ -28,11 +28,12 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 
 - No real automated test suite found; only a manual OAuth repo script exists under `src/app/db/test_oauth_state_repo.py`.
 - `.env.example` is empty despite required env variables in code.
-- Many Russian strings in source appear mojibake-encoded.
+- UTF-8 scan found only one real runtime mojibake string in `src/app/main.py`; earlier broad mojibake output was a console decoding artifact.
+- Telegram user-facing Russian strings are readable as UTF-8; `src/app/scheduler/jobs.py` mojibake markers are intentional.
 - SQLite schema is managed by `create_all()` only; no migration system is visible.
 - Google Calendar sync is partly write-capable, so production use depends on OAuth secrets, token storage, and policy correctness.
 - Crisis mode references `Task.user_id`, but the current `Task` model has no `user_id` column, so that path is effectively skipped.
 
 ## Next Priority
 
-Stabilization Gate: fix config/docs mismatch, add smoke tests for startup/imports, cover task lifecycle and context validation, and verify user-facing text encoding before expanding features.
+Stabilization Gate: fix config/docs mismatch, add smoke tests for startup/imports, cover task lifecycle and context validation, and keep UTF-8 checks in place before expanding features.
