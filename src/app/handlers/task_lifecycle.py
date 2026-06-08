@@ -15,6 +15,7 @@ from app.services.google_calendar_service import GoogleCalendarService
 from app.services.task_service import TaskService
 from app.services.task_sync_service import TaskSyncService
 from app.services.task_sync_policy_service import KNOWN_CATEGORIES
+from app.services.validation_result import ConflictType
 
 router = Router()
 
@@ -122,6 +123,21 @@ def parse_task_payload(text: str) -> tuple[str, str, datetime | None, int]:
     return category, title, planned_at, duration
 
 
+def _format_edit_result_message(result) -> str:
+    validation_result = result.validation_result
+    if (
+        validation_result is not None
+        and validation_result.conflict_type == ConflictType.PRAYER
+    ):
+        base = validation_result.message or result.user_message
+        return (
+            f"⚠️ {base}\n"
+            "Задача не изменена. Новое время нужно подтвердить через /edit."
+        )
+
+    return result.user_message
+
+
 @router.message(Command("edit"))
 async def edit_cmd(
     message: Message,
@@ -178,7 +194,7 @@ async def edit_cmd(
         user_id=message.from_user.id if message.from_user else None,
     )
 
-    await message.answer(result.user_message)
+    await message.answer(_format_edit_result_message(result))
 
 
 @router.message(Command("done"))
