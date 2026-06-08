@@ -108,6 +108,12 @@ class TaskService:
     async def delete_task(self, task_id: int) -> bool:
         return await crud.delete_task(self.session, task_id)
 
+    async def mark_done(self, task_id: int) -> TaskDTO | None:
+        task = await crud.mark_task_done(self.session, task_id)
+        if task is None:
+            return None
+        return self._to_dto(task)
+
     async def list_today(self) -> tuple[list[TaskDTO], list[TaskDTO]]:
         now = now_tz()
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)

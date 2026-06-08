@@ -99,6 +99,19 @@ async def delete_task(session: AsyncSession, task_id: int) -> bool:
     return True
 
 
+async def mark_task_done(session: AsyncSession, task_id: int) -> Task | None:
+    task = await get_task(session, task_id)
+    if task is None:
+        return None
+
+    if task.status != "done":
+        task.status = "done"
+        await session.commit()
+        await session.refresh(task)
+
+    return task
+
+
 async def list_tasks_for_day(
     session: AsyncSession,
     day_start: datetime,

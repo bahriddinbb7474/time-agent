@@ -12,6 +12,7 @@ if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
 
 from app.core.time import now_tz
 from app.db.models import Base, Task
+from app.services.task_service import TaskService
 
 
 async def main():
@@ -41,10 +42,17 @@ async def main():
             await session.commit()
             await session.refresh(task)
 
-            task.status = "done"
-            await session.commit()
-            await session.refresh(task)
+            service = TaskService(session)
+            missing = await service.mark_done(9999)
+            done = await service.mark_done(task.id)
+            done_again = await service.mark_done(task.id)
 
+            assert missing is None
+            assert done is not None
+            assert done.status == "done"
+            assert done_again is not None
+            assert done_again.status == "done"
+            await session.refresh(task)
             assert task.status == "done"
 
         await engine.dispose()
