@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.time import APP_TZ, now_tz
 from app.services.crisis_stack_service import CrisisStackService
 from app.services.google_calendar_service import GoogleCalendarService
+from app.services.task_service import TaskService
 from app.services.task_sync_service import TaskSyncService
 from app.services.task_sync_policy_service import KNOWN_CATEGORIES
 
@@ -178,6 +179,24 @@ async def edit_cmd(
     )
 
     await message.answer(result.user_message)
+
+
+@router.message(Command("done"))
+async def done_cmd(message: Message, session: AsyncSession):
+    payload = message.text.removeprefix("/done").strip()
+
+    if not payload or not ID_RE.match(payload):
+        await message.answer("Формат: /done 12")
+        return
+
+    task_id = int(payload)
+    task = await TaskService(session).mark_done(task_id)
+
+    if task is None:
+        await message.answer(f"Задача #{task_id} не найдена.")
+        return
+
+    await message.answer(f"Готово: #{task.id}")
 
 
 @router.message(Command("delete"))
