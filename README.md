@@ -48,7 +48,13 @@ Required or used variables visible in code:
 - `GCAL_OAUTH_PORT` defaults to `8085`
 - `GCAL_OAUTH_TIMEOUT_SEC` defaults to `300`
 
-Note: `.env.example` exists but is currently empty.
+See `.env.example` for placeholder values.
+
+## Database Migrations
+
+Runtime still uses SQLAlchemy `create_all()` on startup as a safety net.
+Future schema changes should use the project-local approach documented in `migrations/README.md`.
+No schema-changing migration exists yet.
 
 ## Local Run
 

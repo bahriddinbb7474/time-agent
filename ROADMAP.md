@@ -6,7 +6,7 @@
 - Add smoke tests for imports, startup configuration, DB initialization, and scheduler construction.
 - Keep UTF-8 checks for Russian Telegram messages; avoid treating Windows console decoding artifacts as source corruption.
 - Verify alert queue recovery and idempotent send behavior.
-- Decide whether `create_all()` remains acceptable or migrations are needed.
+- Add a migration runner or make an explicit Alembic decision before production schema changes; `create_all()` remains startup safety only.
 
 ## 2. Task Lifecycle + Buttons
 

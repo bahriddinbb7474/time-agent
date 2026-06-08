@@ -16,6 +16,10 @@ $env:PYTHONPATH="src;.venv\Lib\site-packages"; & "C:\Users\USER\AppData\Local\Pr
 
 This command must use a temporary SQLite DB and must not touch `data/app.db`.
 
+## Migration Verification
+
+No migration was run. The migration foundation is documentation-only and must not write to `data/app.db`.
+
 ## Missing Critical Tests
 
 - Import smoke test for all app modules.
