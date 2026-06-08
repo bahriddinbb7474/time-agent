@@ -71,6 +71,22 @@
 
 ---
 
+## Windows Python
+
+На этом Windows laptop для локальных Python-проверок предпочитай явный путь:
+
+    C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe
+
+Для `py_compile` используй:
+
+    "C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe" -m py_compile <file>
+
+- Не полагайся только на bundled Python, если проверка проекта требует локальный Python.
+- Если `.venv` отсутствует или сломан, сообщи это явно, но для syntax checks используй явный Python 3.11.9 path выше.
+- Не создавай venv и не устанавливай зависимости без отдельной команды.
+
+---
+
 ## Git
 
 Не делать commit/push без прямой команды пользователя.
