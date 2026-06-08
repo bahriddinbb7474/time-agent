@@ -226,6 +226,25 @@ async def backlog_cmd(message: Message, session: AsyncSession):
     await message.answer("\n".join(lines))
 
 
+@router.message(Command("boss"))
+async def boss_cmd(message: Message, session: AsyncSession):
+    payload = message.text.removeprefix("/boss").strip()
+
+    if not payload:
+        await message.answer("Формат: /boss текст")
+        return
+
+    task = await TaskService(session).create_task(
+        title=f"Шеф: {payload}",
+        planned_at=None,
+        duration_min=30,
+        category="work",
+        priority_code="BOSS_CRITICAL",
+        user_id=message.from_user.id if message.from_user else None,
+    )
+    await message.answer(f"Boss задача: #{task.id}")
+
+
 @router.callback_query(F.data.startswith("task_done:"))
 async def task_done_callback(callback: CallbackQuery, session: AsyncSession):
     raw_task_id = (callback.data or "").removeprefix("task_done:")
