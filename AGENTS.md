@@ -71,19 +71,39 @@
 
 ---
 
-## Windows Python
+## Python verification on this Windows laptop
 
-На этом Windows laptop для локальных Python-проверок предпочитай явный путь:
+Primary Python for this project:
+
+    .\.venv\Scripts\python.exe
+
+Confirmed working in this project:
+
+- Path: C:\Projects\Projects_1\time-agent\.venv\Scripts\python.exe
+- SQLAlchemy: 2.0.43
+- greenlet: OK
+
+Use this interpreter for all Python checks:
+
+    .\.venv\Scripts\python.exe -m py_compile <file>
+    .\.venv\Scripts\python.exe -m pytest <test_path>
+
+Do not use bundled Codex Python for project tests when project dependencies are required.
+
+Do not use external AppData Python as primary runtime:
 
     C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe
 
-Для `py_compile` используй:
+Reason:
+Codex Windows sandbox may block external Python paths with Access denied.
+The project-local .venv is the correct runtime for this repository.
 
-    "C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe" -m py_compile <file>
+If .venv is missing or broken, stop and report:
+"Project .venv is missing/broken; ask owner to recreate it."
 
-- Не полагайся только на bundled Python, если проверка проекта требует локальный Python.
-- Если `.venv` отсутствует или сломан, сообщи это явно, но для syntax checks используй явный Python 3.11.9 path выше.
-- Не создавай venv и не устанавливай зависимости без отдельной команды.
+Do not install packages.
+Do not recreate venv.
+Do not change code.
 
 ---
 
