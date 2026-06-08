@@ -10,6 +10,7 @@ class Config:
     bot_token: str
     allowed_telegram_id: int | None
     tz: str
+    enable_debug_commands: bool
 
 
 def load_config() -> Config:
@@ -21,9 +22,14 @@ def load_config() -> Config:
     allowed_id = int(raw_id) if raw_id else None
 
     tz = os.getenv("TZ", "Asia/Tashkent").strip() or "Asia/Tashkent"
+    enable_debug_commands = (
+        os.getenv("ENABLE_DEBUG_COMMANDS", "false").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
 
     return Config(
         bot_token=token,
         allowed_telegram_id=allowed_id,
         tz=tz,
+        enable_debug_commands=enable_debug_commands,
     )

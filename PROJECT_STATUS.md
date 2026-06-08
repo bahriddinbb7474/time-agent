@@ -20,6 +20,7 @@ Prototype / pre-production stabilization. The project has meaningful feature cod
 - Siyam explicit toggle and Monday/Thursday heuristic fallback.
 - Family contact reminder candidates without auto-creation.
 - Boss/critical alert loop for marked urgent tasks.
+- Production debug/test commands are gated by `ENABLE_DEBUG_COMMANDS`.
 
 ## Broken or Incomplete Parts
 

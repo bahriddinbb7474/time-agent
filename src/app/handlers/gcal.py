@@ -10,6 +10,7 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import load_config
 from app.services.google_calendar_service import GoogleCalendarService
 from app.services.google_reconciliation_service import GoogleReconciliationService
 
@@ -96,6 +97,10 @@ def build_gcal_router(gcal_service: GoogleCalendarService) -> Router:
 
     @router.message(Command("gcal_debug"))
     async def gcal_debug(message: Message):
+        if not load_config().enable_debug_commands:
+            await message.answer("Debug commands are disabled.")
+            return
+
         try:
             info = await gcal_service.get_debug_info()
         except Exception as e:

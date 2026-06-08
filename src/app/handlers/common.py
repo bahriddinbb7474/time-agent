@@ -7,6 +7,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from app.config import load_config
 from app.core.time import APP_TZ
 from app.db import crud
 from app.db.database import get_sessionmaker
@@ -36,12 +37,20 @@ async def start_cmd(message: Message) -> None:
 
 @router.message(Command("test_brief"))
 async def test_brief_cmd(message: Message) -> None:
+    if not load_config().enable_debug_commands:
+        await message.answer("Debug commands are disabled.")
+        return
+
     await message.answer("🧪 Запускаю тестовый утренний брифинг…")
     await morning_briefing(message.bot)
 
 
 @router.message(Command("test_evening"))
 async def test_evening_cmd(message: Message) -> None:
+    if not load_config().enable_debug_commands:
+        await message.answer("Debug commands are disabled.")
+        return
+
     await message.answer("🧪 Запускаю тестовый вечерний отчёт…")
     await evening_summary(message.bot)
 

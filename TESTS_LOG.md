@@ -20,6 +20,10 @@ This command must use a temporary SQLite DB and must not touch `data/app.db`.
 
 No migration was run. The migration foundation is documentation-only and must not write to `data/app.db`.
 
+## Debug Command Safety
+
+`/test_brief`, `/test_evening`, and `/gcal_debug` are gated by `ENABLE_DEBUG_COMMANDS=false` by default.
+
 ## Missing Critical Tests
 
 - Import smoke test for all app modules.

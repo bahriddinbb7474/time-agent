@@ -40,6 +40,7 @@ Required or used variables visible in code:
 - `TELEGRAM_BOT_TOKEN`
 - `ALLOWED_TELEGRAM_ID`
 - `TZ` defaults to `Asia/Tashkent`
+- `ENABLE_DEBUG_COMMANDS` defaults to `false`
 - `GCAL_CREDENTIALS_PATH`
 - `GCAL_TOKEN_PATH`
 - `GCAL_OAUTH_REDIRECT_URI`
@@ -102,6 +103,8 @@ docker compose up --build
 - `/gcal_pull`
 - `/test_brief`
 - `/test_evening`
+
+Debug/test commands `/test_brief`, `/test_evening`, and `/gcal_debug` only run when `ENABLE_DEBUG_COMMANDS=true`.
 
 ## Testing
 
