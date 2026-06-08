@@ -199,6 +199,18 @@ async def done_cmd(message: Message, session: AsyncSession):
     await message.answer(f"Готово: #{task.id}")
 
 
+@router.message(Command("later"))
+async def later_cmd(message: Message, session: AsyncSession):
+    payload = message.text.removeprefix("/later").strip()
+
+    if not payload:
+        await message.answer("Формат: /later текст")
+        return
+
+    task = await TaskService(session).create_later(payload)
+    await message.answer(f"На потом: #{task.id}")
+
+
 @router.callback_query(F.data.startswith("task_done:"))
 async def task_done_callback(callback: CallbackQuery, session: AsyncSession):
     raw_task_id = (callback.data or "").removeprefix("task_done:")
