@@ -4,6 +4,7 @@ import tempfile
 from datetime import date, datetime, time
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
@@ -144,13 +145,55 @@ async def main():
             )
             assert cached_result.reason_code == "prayer_conflict"
 
-            from app.scheduler.jobs import _resolve_prayer_quiet_until
+            from app.scheduler.jobs import (
+                _is_prayer_alert_stale,
+                _resolve_prayer_quiet_until,
+                ensure_prayer_alerts_for_day,
+            )
 
             quiet_until = await _resolve_prayer_quiet_until(
                 session=session,
                 now=at(date(2026, 6, 10), 14, 50),
             )
             assert quiet_until == at(date(2026, 6, 10), 15, 21)
+
+            PrayerTimesService._REFRESHED_MONTH_KEYS.add((2026, 6))
+            first_alert_ids = await ensure_prayer_alerts_for_day(
+                session=session,
+                target_date=date(2026, 6, 10),
+                chat_id=123456,
+                scheduler=None,
+                bot=None,
+            )
+            second_alert_ids = await ensure_prayer_alerts_for_day(
+                session=session,
+                target_date=date(2026, 6, 10),
+                chat_id=123456,
+                scheduler=None,
+                bot=None,
+            )
+            assert len(first_alert_ids) == 5
+            assert second_alert_ids == first_alert_ids
+
+            prayer_alerts = (
+                await session.execute(
+                    select(AlertQueue)
+                    .where(AlertQueue.alert_type == "prayer_reminder")
+                    .where(AlertQueue.entity_id.like("2026-06-10:%"))
+                )
+            ).scalars().all()
+            assert len(prayer_alerts) == 5
+
+            fajr_alert = next(
+                alert
+                for alert in prayer_alerts
+                if alert.entity_id == "2026-06-10:fajr"
+            )
+            assert await _is_prayer_alert_stale(
+                session=session,
+                alert=fajr_alert,
+                now=at(date(2026, 6, 10), 13, 0),
+            )
 
         await engine.dispose()
 
