@@ -431,7 +431,11 @@ async def _handle_prayer_reminder(session, alert: AlertQueue, bot, scheduler) ->
             )
         return
 
-    text = f"🕋 Напоминание о намазе: {prayer_name}\nВремя намаза уже наступило."
+    text = _build_prayer_reminder_text(
+        prayer_name=prayer_name,
+        prayer_at_raw=payload.get("prayer_at"),
+        now=now,
+    )
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -940,6 +944,28 @@ def _build_boss_runtime_message(
     lines.append(f"Urgency: {urgency_code}")
     lines.append("Подтвердите выполнение после закрытия задачи.")
     return "\n".join(lines)
+
+
+def _build_prayer_reminder_text(
+    *,
+    prayer_name: str,
+    prayer_at_raw,
+    now: datetime,
+) -> str:
+    prayer_at = None
+    if isinstance(prayer_at_raw, str) and prayer_at_raw.strip():
+        try:
+            prayer_at = datetime.fromisoformat(prayer_at_raw)
+            prayer_at = _ensure_app_tz(prayer_at)
+        except Exception:
+            prayer_at = None
+
+    if prayer_at is not None and now < prayer_at:
+        seconds_until = max(0, int((prayer_at - now).total_seconds()))
+        minutes_until = max(1, (seconds_until + 59) // 60)
+        return f"🕋 {prayer_name} через {minutes_until} минут. Готовься к намазу."
+
+    return f"🕋 {prayer_name}. Время намаза наступило."
 
 
 def _priority_from_urgency(*, urgency_code: str, is_critical: bool) -> int:
