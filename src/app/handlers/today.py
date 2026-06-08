@@ -2,7 +2,7 @@
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import now_tz
@@ -14,6 +14,23 @@ from app.services.family_contact_service import FamilyContactService
 from app.services.prayer_times_service import PrayerTimesService
 
 router = Router()
+
+
+def _build_today_done_keyboard(tasks) -> InlineKeyboardMarkup | None:
+    if not tasks:
+        return None
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"✅ Сделал #{task.id}",
+                    callback_data=f"task_done:{task.id}",
+                )
+            ]
+            for task in tasks
+        ]
+    )
 
 
 @router.message(Command("siyam_on"))
@@ -101,7 +118,7 @@ async def today_cmd(message: Message, session: AsyncSession):
     lines.append("\nЗадачи по времени:")
     if timed:
         for t in timed:
-            lines.append(f"• {t.planned_at} — {t.title} ({t.duration_min} мин)")
+            lines.append(f"• #{t.id} {t.planned_at} — {t.title} ({t.duration_min} мин)")
     else:
         lines.append("• (пока нет)")
 
@@ -121,6 +138,10 @@ async def today_cmd(message: Message, session: AsyncSession):
     else:
         lines.append("• (пока нет)")
 
-    await message.answer("\n".join(lines))
+    active_tasks = timed + floating
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=_build_today_done_keyboard(active_tasks),
+    )
 
 

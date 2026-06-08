@@ -3,9 +3,9 @@
 import re
 from datetime import datetime, timedelta
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -197,6 +197,22 @@ async def done_cmd(message: Message, session: AsyncSession):
         return
 
     await message.answer(f"Готово: #{task.id}")
+
+
+@router.callback_query(F.data.startswith("task_done:"))
+async def task_done_callback(callback: CallbackQuery, session: AsyncSession):
+    raw_task_id = (callback.data or "").removeprefix("task_done:")
+    if not ID_RE.match(raw_task_id):
+        await callback.answer("Неверный ID", show_alert=True)
+        return
+
+    task_id = int(raw_task_id)
+    task = await TaskService(session).mark_done(task_id)
+    if task is None:
+        await callback.answer("Задача не найдена", show_alert=True)
+        return
+
+    await callback.answer(f"Готово: #{task.id}")
 
 
 @router.message(Command("delete"))
