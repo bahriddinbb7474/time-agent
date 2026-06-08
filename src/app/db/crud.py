@@ -120,6 +120,7 @@ async def list_tasks_for_day(
     stmt = (
         select(Task)
         .where(Task.planned_at.is_not(None))
+        .where(Task.status == "todo")
         .where(Task.planned_at >= day_start)
         .where(Task.planned_at < day_end)
         .order_by(Task.planned_at.asc())
