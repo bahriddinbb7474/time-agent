@@ -12,6 +12,7 @@ from app.services.task_service import TaskService
 from app.services.google_calendar_service import GoogleCalendarService
 from app.services.family_contact_service import FamilyContactService
 from app.services.prayer_times_service import PrayerTimesService
+from app.services.crisis_stack_service import CrisisStackService
 
 router = Router()
 
@@ -31,6 +32,21 @@ def _build_today_done_keyboard(tasks) -> InlineKeyboardMarkup | None:
             for task in tasks
         ]
     )
+
+
+def _build_focus_hint(tasks) -> str | None:
+    if not tasks:
+        return None
+
+    if CrisisStackService.is_crisis(tasks):
+        urgent_count = len(CrisisStackService.urgent_tasks(tasks))
+        return f"⚠️ Срочных задач: {urgent_count}. /crisis"
+
+    focus_task = CrisisStackService.select_focus_task(tasks)
+    if focus_task is None:
+        return None
+
+    return f"Фокус: #{focus_task.id} — {focus_task.title}"
 
 
 @router.message(Command("siyam_on"))
@@ -83,6 +99,9 @@ async def today_cmd(message: Message, session: AsyncSession):
     # ---------------------------------
 
     lines = ["План на сегодня\n"]
+    focus_hint = _build_focus_hint(timed + floating)
+    if focus_hint:
+        lines.append(focus_hint)
 
     siyam_status = "ON" if daily_policy and daily_policy.is_siyam_day else "OFF"
     siyam_source = (
