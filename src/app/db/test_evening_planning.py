@@ -4,6 +4,7 @@ import tempfile
 from datetime import timedelta
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
@@ -12,7 +13,8 @@ if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
     os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
 
 from app.core.time import now_tz
-from app.db.models import Base, Task
+from app.db.models import AlertQueue, Base, Task
+from app.scheduler.jobs import _ensure_quran_followup_alert
 from app.services.crisis_stack_service import CrisisStackService
 from app.services.evening_planning_service import (
     EveningPlanningInput,
@@ -142,6 +144,26 @@ async def main():
             assert "Tomorrow planning call" in message
             assert "Standup" in message
             assert "Что главное завтра?" in message
+
+            first_alert_id = await _ensure_quran_followup_alert(
+                session=session,
+                chat_id=123,
+                summary_text="Read 2 pages",
+            )
+            second_alert_id = await _ensure_quran_followup_alert(
+                session=session,
+                chat_id=123,
+                summary_text="Read 3 pages",
+            )
+
+            assert first_alert_id == second_alert_id
+
+            result = await session.execute(
+                select(AlertQueue).where(AlertQueue.alert_type == "quran_followup")
+            )
+            alerts = list(result.scalars().all())
+            assert len(alerts) == 1
+            assert alerts[0].status == "pending"
 
         await engine.dispose()
 
