@@ -119,6 +119,14 @@ async def main():
             assert CrisisStackService.is_crisis(floating)
             assert not CrisisStackService.is_crisis([floating[0]])
 
+            active_candidates = await TaskService(session).list_active_focus_candidates()
+            active_titles = [task.title for task in active_candidates]
+            assert "Срочно отправить договор" in active_titles
+            assert "🔥 Закрыть платеж" in active_titles
+            assert "Срочно скрытая done задача" not in active_titles
+            assert "Срочно скрытая later задача" not in active_titles
+            assert "Срочно скрытая cancelled задача" not in active_titles
+
         await engine.dispose()
 
     print("PASS: Focus/crisis tests use isolated temp SQLite DB")

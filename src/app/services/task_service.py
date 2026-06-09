@@ -122,6 +122,10 @@ class TaskService:
         tasks = await crud.list_later_tasks(self.session, limit=limit)
         return [self._to_dto(t, time_only=True) for t in tasks]
 
+    async def list_active_focus_candidates(self) -> list[TaskDTO]:
+        tasks = await crud.list_active_tasks(self.session)
+        return [self._to_dto(t, time_only=True) for t in tasks]
+
     async def list_today(self) -> tuple[list[TaskDTO], list[TaskDTO]]:
         now = now_tz()
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)

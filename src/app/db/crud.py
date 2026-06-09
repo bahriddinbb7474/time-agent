@@ -159,6 +159,17 @@ async def list_floating_tasks(session: AsyncSession) -> list[Task]:
     return list(res.scalars().all())
 
 
+async def list_active_tasks(session: AsyncSession) -> list[Task]:
+    stmt = (
+        select(Task)
+        .where(Task.status == "todo")
+        .order_by(Task.planned_at.asc(), Task.id.asc())
+    )
+
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
 async def list_later_tasks(session: AsyncSession, limit: int = 20) -> list[Task]:
     stmt = (
         select(Task)
