@@ -17,7 +17,10 @@ from app.services.evening_planning_service import (
     build_evening_planning_message,
 )
 from app.services.google_calendar_service import GoogleCalendarService
-from app.services.morning_briefing_service import MorningBriefingInput
+from app.services.morning_briefing_service import (
+    MorningBriefingInput,
+    build_morning_briefing_message,
+)
 from app.services.prayer_times_service import PrayerTimesService
 from app.services.prayer_protection import (
     intervals_overlap,
@@ -25,7 +28,6 @@ from app.services.prayer_protection import (
 )
 from app.services.quran_service import QuranService
 from app.services.routine_service import RoutineService
-from app.services.rules_service import RulesService
 from app.services.task_service import TaskService
 
 log = logging.getLogger("time-agent.scheduler.jobs")
@@ -76,31 +78,14 @@ async def morning_briefing(bot, scheduler=None) -> None:
                 bot=bot,
             )
 
-        rules = await RulesService(session).list_rules()
-        timed, floating = await TaskService(session).list_today()
-
-    lines = ["🕗 Доброе утро! План на сегодня\n"]
-
-    lines.append("🛡 Защищённые слоты:")
-    for r in rules:
-        lines.append(f"• {r.name}: {r.start_time}-{r.end_time}")
-
-    lines.append("\n📌 Задачи по времени:")
-    if timed:
-        for t in timed:
-            lines.append(f"• {t.planned_at} — {t.title} ({t.duration_min} мин)")
-    else:
-        lines.append("• (пока нет)")
-
-    lines.append("\n📝 Задачи без времени:")
-    if floating:
-        for t in floating:
-            lines.append(f"• #{t.id} — {t.title}")
-    else:
-        lines.append("• (пока нет)")
+        briefing_input = await _collect_morning_briefing_input(
+            session,
+            session_factory=Session,
+        )
+        message = build_morning_briefing_message(briefing_input)
 
     if cfg.allowed_telegram_id:
-        await bot.send_message(cfg.allowed_telegram_id, "\n".join(lines))
+        await bot.send_message(cfg.allowed_telegram_id, message)
 
 
 async def _collect_morning_briefing_input(
