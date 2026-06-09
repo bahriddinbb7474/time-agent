@@ -10,6 +10,7 @@
 - Stage 11 Evening Planning Engine: done.
 - Stage 12 Morning Briefing Upgrade: done.
 - Stage 13 Google Calendar Read-First Sync: done.
+- Stage 14 DailyPlan / completed_at lifecycle: done in code and temp-DB tests; production DB migration not run.
 - Next stage: Family/Relationship Layer or remaining lifecycle semantics, depending on owner priority.
 
 ## 1. Stabilization Gate
@@ -21,10 +22,11 @@
 
 - Completed: safe temp-DB task status smoke test.
 - Completed: local-only `done` status update.
+- Completed: first local `done` sets `Task.completed_at`; repeated done keeps the original completion time.
 - Completed: `/done <id>` command.
 - Completed: `/today` hides `done` and `cancelled` tasks from active timed/floating lists.
 - Completed: minimal Telegram `✅ Сделал` button using `task_done:<id>`.
-- Remaining: postponed/later/cancelled semantics, edit/delete/reschedule buttons, boss alert cleanup on task done, and Google Calendar lifecycle policy.
+- Remaining: reopen flow, postponed/later/cancelled semantics, edit/delete/reschedule buttons, boss alert cleanup on task done, and Google Calendar lifecycle policy.
 
 ## 3. Capture Mode + Later Inbox
 
@@ -61,18 +63,28 @@
 ## 6. Evening Planning Engine
 
 - Completed: evening summary is now a short 21:00 planning flow.
-- Completed: review includes unfinished tasks, Later Inbox, focus/crisis hint, tomorrow local tasks, Quran status, prayer status, health/siyam context, and read-only Google Calendar tomorrow context.
+- Completed: review includes done-today from `completed_at`, unfinished tasks, Later Inbox, focus/crisis hint, tomorrow local tasks, Quran status, prayer status, health/siyam context, and read-only Google Calendar tomorrow context.
 - Completed: final prompt asks `Что главное завтра?`.
 - Completed: Quran follow-up alert reuse has a temp-DB regression check.
-- Remaining: no `DailyPlan` storage, no `completed_at`/done-today tracking, and no silent task moving or automatic tomorrow task creation.
+- Remaining: no silent task moving, no automatic tomorrow task creation, and old completed tasks have no historical `completed_at`.
 
 ## 7. Morning Briefing
 
 - Completed: morning briefing is now a short ready plan for today.
-- Completed: includes local today tasks, soft focus/crisis context, prayer status, Quran/health/siyam context, read-only Google Calendar today context, and a gentle Later Inbox count.
+- Completed: includes saved DailyPlan text when present, local today tasks, soft focus/crisis context, prayer status, Quran/health/siyam context, read-only Google Calendar today context, and a gentle Later Inbox count.
 - Completed: keeps the existing 08:30 scheduler and debug-gated `/test_brief` trigger.
-- Remaining: no `DailyPlan` storage, no `completed_at`/done-today tracking, no AI planning, no Google writes, and no silent rescheduling.
-- Later: consume stored evening plan only after a storage/approval model is designed.
+- Remaining: no AI planning, no Google writes, no silent rescheduling, and no automatic use of an evening-generated plan.
+
+## 8.5 DailyPlan / completed_at Lifecycle
+
+- Completed: nullable `tasks.completed_at` model field.
+- Completed: minimal `daily_plans` model for manual saved plans.
+- Completed: DailyPlan save/read/upsert service.
+- Completed: `/plan_tomorrow <text>` saves tomorrow's manual plan.
+- Completed: evening planning shows done-today from `completed_at`.
+- Completed: morning briefing shows today's saved DailyPlan when present.
+- Completed: SQL migration file and temp SQLite migration smoke test.
+- Remaining: production `data/app.db` migration requires backup and explicit owner approval, no reopen flow yet, no AI plan generation, and no automatic task moving.
 
 ## 8. Google Calendar Read-First Sync
 

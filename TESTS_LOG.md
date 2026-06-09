@@ -10,6 +10,8 @@
 - `src/app/db/test_focus_crisis.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_evening_planning.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_morning_briefing.py` is a manual async smoke test using an isolated temporary SQLite DB.
+- `src/app/db/test_daily_plan_lifecycle.py` is a manual async smoke test using an isolated temporary SQLite DB.
+- `src/app/db/test_daily_plan_migration.py` is a temp SQLite migration smoke test.
 - Handler names `test_brief_cmd` and `test_evening_cmd` are Telegram command handlers, not tests.
 
 ## Tests Run
@@ -70,11 +72,27 @@ $env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages";
 
 This verifies morning briefing source data, active today filtering, Later Inbox count, focus hint input, formatter output, Google Calendar today formatting input, and Google unavailable fallback against a temporary SQLite DB only.
 
+Safe DailyPlan/completed_at lifecycle smoke command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/test_daily_plan_lifecycle.py
+```
+
+This verifies nullable `Task.completed_at`, idempotent `mark_done()`, done-today query, and DailyPlan save/read/upsert against a temporary SQLite DB only.
+
+Safe DailyPlan migration smoke command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/test_daily_plan_migration.py
+```
+
+This applies the Stage 14 SQL migration to a temporary SQLite DB only and verifies `tasks.completed_at`, `daily_plans`, and `schema_migrations`.
+
 Python note: the documented Python path requires existing `.venv\Lib\site-packages` on `PYTHONPATH` for project dependencies in this environment. `.venv\Scripts\python.exe` exists but its launcher is broken.
 
 ## Migration Verification
 
-No migration was run. The migration foundation is documentation-only and must not write to `data/app.db`.
+The Stage 14 migration file was tested only on a temporary SQLite DB. It was not run against production `data/app.db`.
 
 ## Debug Command Safety
 
@@ -158,6 +176,18 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - No real Google API calls were made in tests.
 - No migrations, bot startup, silent rescheduling, AI planning, Google writes, or production DB writes were added.
 
+## Stage 14 DailyPlan / completed_at Lifecycle Verification
+
+- DailyPlan/completed_at lifecycle smoke test passed against an isolated temporary SQLite DB.
+- Stage 14 migration smoke test passed against a temporary SQLite DB only.
+- `mark_done()` sets `completed_at` on first done and keeps the original timestamp on repeated done.
+- Done-today query uses `completed_at`; old done tasks without completion timestamps are not counted.
+- `/plan_tomorrow <text>` saves/upserts tomorrow's manual DailyPlan.
+- Morning briefing shows today's saved DailyPlan when present.
+- Evening planning shows done-today from `completed_at`.
+- Production `data/app.db` migration was not run.
+- No AI planning, automatic task moving, Google Calendar behavior changes, real bot startup, or production DB writes were added.
+
 ## Stage 6 Closeout Verification
 
 - Root info docs exist.
@@ -181,8 +211,8 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Handler-level tests for `/focus`, `/crisis`, `/today` focus hint, and next-focus-after-done messages.
 - Handler/job-level tests for rendered evening summary delivery.
 - Handler/job-level tests for rendered morning briefing delivery.
-- Tests for future `DailyPlan` storage and morning briefing consumption after that model is designed.
-- Tests for completed-at/done-today tracking after schema support exists.
+- Handler-level tests for `/plan_tomorrow`.
+- Production migration rehearsal on a copied real DB before owner-approved deployment.
 - Tests for promoting Later Inbox items into scheduled tasks.
 - Tests for boss alert cleanup when a boss task is marked done.
 - ContextValidator tests for sleep, second sleep, protected slots, and Siyam warnings.
