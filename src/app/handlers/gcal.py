@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, time
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import (
@@ -11,7 +13,9 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import load_config
+from app.core.time import APP_TZ
 from app.services.google_calendar_service import GoogleCalendarService
+from app.services.google_event_formatter import format_google_event_lines
 from app.services.google_reconciliation_service import GoogleReconciliationService
 
 
@@ -68,30 +72,34 @@ def build_gcal_router(gcal_service: GoogleCalendarService) -> Router:
 
     @router.message(Command("gcal_today"))
     async def gcal_today(message: Message):
+        today = datetime.now(APP_TZ).date()
+        time_min = datetime.combine(today, time.min, tzinfo=APP_TZ)
+        time_max = datetime.combine(today, time.max, tzinfo=APP_TZ)
+
         try:
-            events = await gcal_service.get_today_events()
+            events = await gcal_service.list_events(time_min=time_min, time_max=time_max)
         except Exception as e:
+            e = "unavailable"
             await message.answer(f"Ошибка чтения Google Calendar ❌\n{e}")
             return
 
-        if not events:
+        event_lines = format_google_event_lines(events)
+        if event_lines:
+            await message.answer(
+                "\n\n".join(
+                    [
+                        "Google Calendar today:\n",
+                        *event_lines,
+                    ]
+                )
+            )
+            return
+
+        if not event_lines:
             await message.answer("Сегодня в Google Calendar событий нет.")
             return
 
         lines = ["📅 События Google Calendar на сегодня:\n"]
-
-        for idx, event in enumerate(events, start=1):
-            summary = event.get("summary", "(no title)")
-            start_value = event.get("start", "-")
-            end_value = event.get("end", "-")
-            status = event.get("status", "-")
-
-            lines.append(
-                f"{idx}. {summary}\n"
-                f"   start: {start_value}\n"
-                f"   end:   {end_value}\n"
-                f"   status:{status}"
-            )
 
         await message.answer("\n\n".join(lines))
 
