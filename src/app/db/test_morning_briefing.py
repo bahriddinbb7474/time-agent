@@ -14,6 +14,7 @@ if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
 
 from app.core.time import APP_TZ, now_tz
 from app.db.models import Base, Task
+from app.scheduler.jobs import _collect_morning_briefing_input
 from app.services.crisis_stack_service import CrisisStackService
 from app.services.morning_briefing_service import (
     MorningBriefingInput,
@@ -152,6 +153,14 @@ async def main():
             assert "Намаз / защита" in message
             assert "Коран / здоровье" in message
             assert "1 в inbox. Без давления: /backlog" in message
+
+            collected = await _collect_morning_briefing_input(session)
+            assert len(collected.timed_tasks) == 1
+            assert len(collected.floating_tasks) == 1
+            assert collected.later_count == 1
+            assert collected.prayer_lines
+            assert collected.quran_lines
+            assert collected.health_lines
 
         await engine.dispose()
 

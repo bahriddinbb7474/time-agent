@@ -17,6 +17,7 @@ from app.services.evening_planning_service import (
     build_evening_planning_message,
 )
 from app.services.google_calendar_service import GoogleCalendarService
+from app.services.morning_briefing_service import MorningBriefingInput
 from app.services.prayer_times_service import PrayerTimesService
 from app.services.prayer_protection import (
     intervals_overlap,
@@ -100,6 +101,24 @@ async def morning_briefing(bot, scheduler=None) -> None:
 
     if cfg.allowed_telegram_id:
         await bot.send_message(cfg.allowed_telegram_id, "\n".join(lines))
+
+
+async def _collect_morning_briefing_input(session) -> MorningBriefingInput:
+    task_service = TaskService(session)
+    timed, floating = await task_service.list_today()
+    later_items = await task_service.list_later(limit=50)
+
+    quran_service = QuranService(session)
+    quran_summary = await quran_service.get_daily_summary()
+
+    return MorningBriefingInput(
+        timed_tasks=timed,
+        floating_tasks=floating,
+        later_count=len(later_items),
+        prayer_lines=await _build_prayer_status_section(session),
+        quran_lines=[quran_service.build_deficit_message(quran_summary)],
+        health_lines=await _build_health_status_section(session),
+    )
 
 
 
