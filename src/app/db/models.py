@@ -73,6 +73,41 @@ class Task(Base):
         nullable=False,
     )
 
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+
+class DailyPlan(Base):
+    __tablename__ = "daily_plans"
+    __table_args__ = (
+        UniqueConstraint("plan_date", name="uq_daily_plans_plan_date"),
+        Index("ix_daily_plans_plan_date", "plan_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    plan_date: Mapped[date] = mapped_column(Date, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="telegram_manual",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+
 class CrisisStack(Base):
     __tablename__ = "crisis_stacks"
     __table_args__ = (

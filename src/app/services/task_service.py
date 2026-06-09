@@ -30,6 +30,7 @@ class TaskDTO:
     status: str
     category: str
     context_status: str
+    completed_at: str | None = None
 
 
 class TaskService:
@@ -113,6 +114,10 @@ class TaskService:
         if task is None:
             return None
         return self._to_dto(task)
+
+    async def list_done_for_date(self, target_date) -> list[TaskDTO]:
+        tasks = await crud.list_done_tasks_for_date(self.session, target_date)
+        return [self._to_dto(t, time_only=True) for t in tasks]
 
     async def create_later(self, title: str) -> TaskDTO:
         task = await crud.create_later_task(self.session, title=title)
@@ -270,6 +275,12 @@ class TaskService:
         else:
             planned_at = None
 
+        completed_at = (
+            task.completed_at.astimezone(APP_TZ).strftime("%Y-%m-%d %H:%M")
+            if task.completed_at
+            else None
+        )
+
         return TaskDTO(
             id=task.id,
             title=task.title,
@@ -278,6 +289,7 @@ class TaskService:
             status=task.status,
             category=task.category,
             context_status=task.context_status,
+            completed_at=completed_at,
         )
 
 
