@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -102,6 +102,33 @@ def build_gcal_router(gcal_service: GoogleCalendarService) -> Router:
         lines = ["📅 События Google Calendar на сегодня:\n"]
 
         await message.answer("\n\n".join(lines))
+
+    @router.message(Command("gcal_tomorrow"))
+    async def gcal_tomorrow(message: Message):
+        tomorrow = datetime.now(APP_TZ).date() + timedelta(days=1)
+        time_min = datetime.combine(tomorrow, time.min, tzinfo=APP_TZ)
+        time_max = datetime.combine(tomorrow, time.max, tzinfo=APP_TZ)
+
+        try:
+            events = await gcal_service.list_events(time_min=time_min, time_max=time_max)
+        except Exception as e:
+            e = "unavailable"
+            await message.answer(f"Google Calendar unavailable: {e}")
+            return
+
+        event_lines = format_google_event_lines(events)
+        if not event_lines:
+            await message.answer("Tomorrow in Google Calendar: no events.")
+            return
+
+        await message.answer(
+            "\n\n".join(
+                [
+                    "Google Calendar tomorrow:\n",
+                    *event_lines,
+                ]
+            )
+        )
 
     @router.message(Command("gcal_debug"))
     async def gcal_debug(message: Message):
