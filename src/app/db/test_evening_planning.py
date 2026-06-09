@@ -12,7 +12,6 @@ if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
     os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
 
 from app.core.time import now_tz
-from app.db import crud
 from app.db.models import Base, Task
 from app.services.crisis_stack_service import CrisisStackService
 from app.services.task_service import TaskService
@@ -40,14 +39,6 @@ async def main():
                 second=0,
                 microsecond=0,
             )
-            tomorrow_start = tomorrow_at.replace(
-                hour=0,
-                minute=0,
-                second=0,
-                microsecond=0,
-            )
-            tomorrow_end = tomorrow_start + timedelta(days=1)
-
             session.add_all(
                 [
                     Task(
@@ -118,11 +109,7 @@ async def main():
             later_items = await task_service.list_later(limit=5)
             assert [item.title for item in later_items] == ["Call supplier"]
 
-            tomorrow_tasks = await crud.list_tasks_for_day(
-                session,
-                tomorrow_start,
-                tomorrow_end,
-            )
+            tomorrow_tasks = await task_service.list_tomorrow()
             tomorrow_titles = [task.title for task in tomorrow_tasks]
             assert tomorrow_titles == ["Tomorrow planning call"]
 
