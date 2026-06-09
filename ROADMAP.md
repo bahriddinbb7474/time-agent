@@ -6,7 +6,8 @@
 - Stage 7 local done/button slice: done.
 - Stage 8 Capture Mode + Later Inbox: done.
 - Stage 9 Prayer Protected Scheduling hardening: done.
-- Next stage: Evening Planning Engine or Focus/Crisis Mode, with remaining lifecycle semantics tracked separately.
+- Stage 10 Focus / Crisis Mode: done.
+- Next stage: Evening Planning Engine, with remaining lifecycle semantics tracked separately.
 
 ## 1. Stabilization Gate
 
@@ -45,9 +46,14 @@
 
 ## 5. Focus/Crisis Mode
 
-- Implement `/focus` command surface.
-- Complete crisis stack persistence and user scoping.
-- Add rules for urgent overload, next-action selection, and recovery to normal mode.
+- Completed: deterministic urgent detection for active `todo` tasks.
+- Completed: pure focus selector with no DB writes.
+- Completed: active focus candidate query using the existing `tasks` table.
+- Completed: `/focus` command surface.
+- Completed: `/crisis` command surface for 2+ urgent active tasks.
+- Completed: short `/today` focus/crisis hint.
+- Completed: next-focus suggestion after `/done` and `task_done:<id>`.
+- Remaining: persistent crisis stack DB flow, user-scoped crisis stacks, boss alert cleanup on task done, and richer focus buttons.
 
 ## 6. Evening Planning Engine
 

@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 9 Prayer Protected Scheduling hardening is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, evening Later review, and prayer protected scheduling hardening are now in place.
+Stage 10 Focus / Crisis Mode is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, evening Later review, prayer protected scheduling hardening, `/focus`, and `/crisis` are now in place.
 
 ## Working Features Visible in Code
 
@@ -11,6 +11,10 @@ Stage 9 Prayer Protected Scheduling hardening is complete. The project remains p
 - SQLite persistence through SQLAlchemy async.
 - Default protected slots and routines seeding.
 - Task creation, editing, deletion, local done marking, Later Inbox capture, boss capture, and daily active listing.
+- Deterministic focus/crisis selection for active `todo` tasks.
+- `/focus` suggests one next task; `/crisis` shows an urgent stack when 2+ urgent active tasks exist.
+- `/today` shows a short focus/crisis hint when useful.
+- `/done` and `task_done:<id>` suggest the next focus task when one remains.
 - Context validation for sleep, second sleep, prayer windows, protected slots, and Siyam heavy-load warnings.
 - Prayer protected windows use Hanafi `school=1`, `Asia/Tashkent`, 15 minutes before prayer, 20 minutes after prayer, and the Dhuhr `13:00-13:20` dead zone.
 - `/add` and `/edit` do not silently create/update tasks inside prayer conflicts; they warn and suggest a safe slot when available.
@@ -29,6 +33,7 @@ Stage 9 Prayer Protected Scheduling hardening is complete. The project remains p
 - Safe task status smoke test uses an isolated temporary SQLite DB.
 - Safe Later Inbox smoke test uses an isolated temporary SQLite DB.
 - Safe prayer validation/recovery smoke test uses an isolated temporary SQLite DB.
+- Safe focus/crisis smoke test uses an isolated temporary SQLite DB.
 
 ## Broken or Incomplete Parts
 
@@ -37,15 +42,17 @@ Stage 9 Prayer Protected Scheduling hardening is complete. The project remains p
 - UTF-8 scan found only one real runtime mojibake string in `src/app/main.py`; most previous mojibake output was a console decoding artifact.
 - Telegram user-facing Russian strings are readable as UTF-8; `src/app/scheduler/jobs.py` mojibake marker strings are intentional.
 - Migration foundation is documented in `migrations/`; no schema-changing migrations exist yet, and startup still calls `create_all()`.
+- Persistent crisis stack DB flow is not implemented yet.
 - Crisis trigger tries to filter by `Task.user_id`, but `Task` model has no `user_id`; code logs and skips this trigger.
 - Family layer is candidate/log oriented, not a full task lifecycle.
 - Local task `done` and Later Inbox `status="later"` capture are implemented; `moved`, `skipped`, `postponed`, and `cancelled` task lifecycle semantics are not implemented yet.
 - Marking a task done is local-only and does not update/delete Google Calendar events.
 - Later Inbox appears in evening summary, but full evening/morning planning engines and owner approval workflow are not complete.
 - Boss alert suppression during prayer is intentionally unresolved and not implemented.
+- Boss alert cleanup on task done is still separate from focus/crisis mode.
+- Focus/crisis mode does not use AI planning and does not autonomously reschedule tasks.
 - DB-backed prayer window settings are not implemented; Stage 9 uses code-level constants.
 - Google Calendar prayer conflict review for imported external events remains future work.
-- `/focus` is not visible as a complete command surface.
 
 ## Production Readiness
 

@@ -14,11 +14,12 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Stage 7 local done/button slice is complete.
 - Stage 8 Capture Mode + Later Inbox is complete.
 - Stage 9 Prayer Protected Scheduling hardening is complete.
+- Stage 10 Focus / Crisis Mode is complete.
 
 ## What Works in Code
 
 - Owner-only Telegram access.
-- `/start`, `/rules`, `/today`, `/add`, `/edit`, `/delete`, `/done`, `/later`, `/backlog`, `/boss`.
+- `/start`, `/rules`, `/today`, `/add`, `/edit`, `/delete`, `/done`, `/later`, `/backlog`, `/boss`, `/focus`, `/crisis`.
 - Minimal `✅ Сделал` button from `/today` marks tasks done through `task_done:<id>`.
 - Later Inbox uses existing `tasks` rows with `status="later"` and is shown in evening summary.
 - `/health` owner-only runtime status command.
@@ -28,6 +29,8 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Prayer protected scheduling uses Hanafi `school=1`, `Asia/Tashkent`, 15-minute pre-prayer and 20-minute post-prayer windows, plus Dhuhr `13:00-13:20`.
 - `/add` and `/edit` warn on prayer conflicts and suggest safe slots without silent scheduling.
 - Quran follow-up and hydration notifications are quieted during cached prayer protected windows.
+- `/focus` suggests one deterministic active task; `/crisis` shows an urgent stack when 2+ urgent active tasks exist.
+- `/today` includes a short focus/crisis hint; `/done` and `task_done:<id>` can suggest the next focus.
 - Morning briefing and evening summary jobs.
 - Quran progress and follow-up reminders.
 - Basic family contact candidate generation.
@@ -43,6 +46,8 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Marking tasks done is local-only; Google Calendar lifecycle behavior for done/cancelled/later is not implemented.
 - Later Inbox is local-only; no AI/STT/voice capture is implemented.
 - Boss alert cleanup on task done is still a follow-up.
+- Persistent crisis stack DB flow is not implemented yet.
+- Focus/crisis mode is deterministic only: no AI planning and no autonomous rescheduling.
 - Boss alert suppression during prayer is unresolved and not implemented.
 - Google Calendar imported-event prayer conflict review remains future work.
 - Prayer window settings are code-level constants, not DB-backed settings.
@@ -50,4 +55,4 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 
 ## Next Priority
 
-Evening Planning Engine or Focus/Crisis Mode, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, boss alert cleanup on done, boss prayer suppression decision, and Google Calendar lifecycle policy.
+Evening Planning Engine, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, and Google Calendar lifecycle policy.

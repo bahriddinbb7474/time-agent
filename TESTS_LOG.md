@@ -7,6 +7,7 @@
 - `src/app/db/test_task_status.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_later_inbox.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_prayer_validation.py` is a manual async smoke test using an isolated temporary SQLite DB.
+- `src/app/db/test_focus_crisis.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - Handler names `test_brief_cmd` and `test_evening_cmd` are Telegram command handlers, not tests.
 
 ## Tests Run
@@ -42,6 +43,14 @@ $env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages";
 ```
 
 This verifies Hanafi/Tashkent constants, prayer protected-window conflicts, Dhuhr dead zone, safe-slot suggestion, completed-prayer skip, cached read-only validation, prayer quieting, no duplicate prayer alerts, and stale prayer alert detection against a temporary SQLite DB only.
+
+Safe focus/crisis smoke command:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages"; & "C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe" src/app/db/test_focus_crisis.py
+```
+
+This verifies urgent detection, active filtering excluding `done`/`cancelled`/`later`, focus selector behavior, crisis threshold behavior, and active focus candidate query against a temporary SQLite DB only.
 
 Python note: the documented Python path requires existing `.venv\Lib\site-packages` on `PYTHONPATH` for project dependencies in this environment. `.venv\Scripts\python.exe` exists but its launcher is broken.
 
@@ -88,6 +97,17 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Boss alerts are not suppressed during prayer; this remains an owner decision.
 - Bot was not started.
 
+## Stage 10 Focus / Crisis Mode Verification
+
+- Focus/crisis logic passed isolated temp SQLite smoke test.
+- `/focus` and `/crisis` were verified by `py_compile` and safe source search.
+- `/today` focus/crisis hint was verified by `py_compile`.
+- `/done` and `task_done:<id>` next-focus suggestion was verified by `py_compile`.
+- Persistent crisis stack DB flow was not implemented.
+- Boss alert cleanup remains separate.
+- No AI planning and no autonomous rescheduling were added.
+- Bot was not started.
+
 ## Stage 6 Closeout Verification
 
 - Root info docs exist.
@@ -105,9 +125,10 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Import smoke test for all app modules.
 - Config loading tests for missing/valid env.
 - DB init and seed tests.
-- Task create/edit/delete service tests beyond the current manual status smoke.
+- Task create/edit/delete service tests beyond the current manual status/focus smoke.
 - Handler-level tests for `/done` and `task_done:<id>`.
 - Handler-level tests for `/later`, `/backlog`, and `/boss`.
+- Handler-level tests for `/focus`, `/crisis`, `/today` focus hint, and next-focus-after-done messages.
 - Tests for promoting Later Inbox items into scheduled tasks.
 - Tests for boss alert cleanup when a boss task is marked done.
 - ContextValidator tests for sleep, second sleep, protected slots, and Siyam warnings.
@@ -118,3 +139,4 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Quran progress parse/backward-confirmation/daily-summary tests.
 - OwnerOnlyMiddleware tests.
 - Scheduler job construction tests.
+- Persistent crisis stack recovery tests after user-scoped schema/flow is decided.
