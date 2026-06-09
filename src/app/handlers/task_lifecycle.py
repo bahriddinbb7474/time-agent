@@ -142,6 +142,24 @@ def _format_focus_task(task) -> str:
     return f"Фокус: #{task.id} — {task.title}\nСейчас делай это."
 
 
+def _format_crisis_stack(tasks) -> str:
+    urgent_tasks = CrisisStackService.urgent_tasks(tasks)
+    ordered_tasks = CrisisStackService.order_focus_tasks(urgent_tasks)
+    focus_task = ordered_tasks[0]
+
+    lines = [
+        f"Срочных задач: {len(urgent_tasks)}.",
+        f"Фокус: #{focus_task.id} — {focus_task.title}",
+    ]
+
+    if len(ordered_tasks) > 1:
+        lines.append("Дальше:")
+        for task in ordered_tasks[1:5]:
+            lines.append(f"• #{task.id} — {task.title}")
+
+    return "\n".join(lines)
+
+
 @router.message(Command("edit"))
 async def edit_cmd(
     message: Message,
@@ -229,6 +247,17 @@ async def focus_cmd(message: Message, session: AsyncSession):
         return
 
     await message.answer(_format_focus_task(focus_task))
+
+
+@router.message(Command("crisis"))
+async def crisis_cmd(message: Message, session: AsyncSession):
+    tasks = await TaskService(session).list_active_focus_candidates()
+
+    if not CrisisStackService.is_crisis(tasks):
+        await message.answer("Кризиса нет. Попробуй /focus.")
+        return
+
+    await message.answer(_format_crisis_stack(tasks))
 
 
 @router.message(Command("later"))
