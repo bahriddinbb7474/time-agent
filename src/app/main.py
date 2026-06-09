@@ -14,6 +14,7 @@ from app.handlers.today import router as today_router
 from app.handlers.task_lifecycle import router as task_lifecycle_router
 from app.handlers.quran import router as quran_router
 from app.handlers.gcal import build_gcal_router
+from app.handlers.capture import router as capture_router
 from app.services.google_calendar_service import GoogleCalendarService
 
 from app.db.database import get_engine, get_sessionmaker
@@ -104,6 +105,7 @@ async def main() -> None:
     dp.include_router(today_router)
     dp.include_router(quran_router)
     dp.include_router(build_gcal_router(gcal_service))
+    dp.include_router(capture_router)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
