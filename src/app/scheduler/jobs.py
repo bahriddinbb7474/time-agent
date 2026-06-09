@@ -16,6 +16,7 @@ from app.services.evening_planning_service import (
     EveningPlanningInput,
     build_evening_planning_message,
 )
+from app.services.google_calendar_service import GoogleCalendarService
 from app.services.prayer_times_service import PrayerTimesService
 from app.services.prayer_protection import (
     intervals_overlap,
@@ -217,6 +218,7 @@ async def evening_summary(bot) -> None:
         prayer_section = await _build_prayer_status_section(session)
         quran_lines = [quran_service.build_deficit_message(quran_summary)]
         health_lines = await _build_health_status_section(session)
+        google_tomorrow_lines = await _build_google_tomorrow_section(Session)
 
         followup_keyboard = None
         if not quran_summary.goal_reached and cfg.allowed_telegram_id:
@@ -248,6 +250,7 @@ async def evening_summary(bot) -> None:
                 prayer_lines=prayer_section,
                 quran_lines=quran_lines,
                 health_lines=health_lines,
+                google_tomorrow_lines=google_tomorrow_lines,
             )
         )
 
@@ -993,6 +996,47 @@ async def _build_health_status_section(session) -> list[str]:
         lines.append("• Вода: дневные напоминания приглушены")
 
     return lines
+
+
+async def _build_google_tomorrow_section(session_factory) -> list[str]:
+    tomorrow = datetime.now(APP_TZ).date() + timedelta(days=1)
+    day_start = datetime.combine(tomorrow, time.min, tzinfo=APP_TZ)
+    day_end = day_start + timedelta(days=1)
+
+    service = GoogleCalendarService(
+        session_factory=session_factory,
+        bot_notify_fn=_noop_bot_notify,
+    )
+
+    try:
+        events = await service.list_events(time_min=day_start, time_max=day_end)
+    except Exception as exc:
+        log.info("Google Calendar tomorrow context unavailable: %s", exc)
+        return ["• недоступен"]
+
+    if not events:
+        return ["• событий нет"]
+
+    lines = [_format_google_tomorrow_event(event) for event in events[:5]]
+    if len(events) > 5:
+        lines.append(f"• ещё: {len(events) - 5}")
+    return lines
+
+
+async def _noop_bot_notify(user_id: int, text: str) -> None:
+    return None
+
+
+def _format_google_tomorrow_event(event) -> str:
+    summary = getattr(event, "summary", "(no title)")
+    if getattr(event, "all_day", False):
+        return f"• весь день — {summary}"
+
+    start_at = getattr(event, "start_at", None)
+    if start_at is None:
+        return f"• {summary}"
+
+    return f"• {start_at.astimezone(APP_TZ).strftime('%H:%M')} — {summary}"
 
 
 async def _ensure_quran_followup_alert(

@@ -130,6 +130,7 @@ async def main():
                     prayer_lines=["• Fajr: done"],
                     quran_lines=["• Quran: review"],
                     health_lines=["• Hydration: ok"],
+                    google_tomorrow_lines=["• 10:00 — Standup"],
                 )
             )
 
@@ -139,6 +140,7 @@ async def main():
             assert "Срочно проверить договор" in message
             assert "Call supplier" in message
             assert "Tomorrow planning call" in message
+            assert "Standup" in message
             assert "Что главное завтра?" in message
 
         await engine.dispose()
