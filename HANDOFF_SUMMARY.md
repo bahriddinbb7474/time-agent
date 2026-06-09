@@ -17,6 +17,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Stage 10 Focus / Crisis Mode is complete.
 - Stage 11 Evening Planning Engine is complete.
 - Stage 12 Morning Briefing Upgrade is complete.
+- Stage 13 Google Calendar Read-First Sync is complete.
 
 ## What Works in Code
 
@@ -25,7 +26,8 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Minimal `✅ Сделал` button from `/today` marks tasks done through `task_done:<id>`.
 - Later Inbox uses existing `tasks` rows with `status="later"` and is shown in evening summary.
 - `/health` owner-only runtime status command.
-- Google Calendar OAuth, read today, debug, pull/reconcile, create/update/delete for allowed task categories.
+- Google Calendar OAuth, read today/tomorrow, debug, pull/import-local reconcile, advisory conflicts, and write-capable methods gated off by default.
+- `ENABLE_GOOGLE_WRITES=false` is the default production-safe policy; local task changes remain local-only unless explicitly enabled later.
 - Prayer times fetch/cache and prayer reminder alerts.
 - Context validation for sleep, second sleep, prayer, protected slots, and Siyam heavy-load warnings.
 - Prayer protected scheduling uses Hanafi `school=1`, `Asia/Tashkent`, 15-minute pre-prayer and 20-minute post-prayer windows, plus Dhuhr `13:00-13:20`.
@@ -46,7 +48,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - UTF-8 scan found only one real runtime mojibake string in `src/app/main.py`; earlier broad mojibake output was a console decoding artifact.
 - Telegram user-facing Russian strings are readable as UTF-8; `src/app/scheduler/jobs.py` mojibake markers are intentional.
 - Migration foundation exists in `migrations/`, but no runner or schema-changing migrations exist yet.
-- Google Calendar sync is partly write-capable, so production use depends on OAuth secrets, token storage, and policy correctness.
+- Google Calendar service methods remain write-capable, but task sync write paths are gated by `ENABLE_GOOGLE_WRITES=false` by default.
 - Marking tasks done is local-only; Google Calendar lifecycle behavior for done/cancelled/later is not implemented.
 - Later Inbox is local-only; no AI/STT/voice capture is implemented.
 - Boss alert cleanup on task done is still a follow-up.
@@ -54,7 +56,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Focus/crisis mode is deterministic only: no AI planning and no autonomous rescheduling.
 - Evening planning is message-only: no `DailyPlan` storage, no `completed_at`/done-today tracking, and no stored evening output for morning briefing yet.
 - Owner still creates tomorrow tasks manually with `/add`, `/later`, or `/boss`.
-- Morning briefing does not use AI planning, does not write Google Calendar, and does not silently reschedule tasks.
+- Morning/evening Google conflict hints are advisory only; no local task moving and no Google event changes are performed.
 - Boss alert suppression during prayer is unresolved and not implemented.
 - Google Calendar imported-event prayer conflict review remains future work.
 - Prayer window settings are code-level constants, not DB-backed settings.
@@ -62,4 +64,4 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 
 ## Next Priority
 
-Google Calendar Read-First Sync, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, Google Calendar lifecycle policy, and a future storage/approval model for evening plans.
+Next priority depends on owner choice: Family/Relationship Layer or remaining lifecycle work. Track: promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, richer Google conflict actions, and a future storage/approval model for evening plans.

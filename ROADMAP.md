@@ -9,7 +9,8 @@
 - Stage 10 Focus / Crisis Mode: done.
 - Stage 11 Evening Planning Engine: done.
 - Stage 12 Morning Briefing Upgrade: done.
-- Next stage: Google Calendar Read-First Sync, with remaining lifecycle semantics tracked separately.
+- Stage 13 Google Calendar Read-First Sync: done.
+- Next stage: Family/Relationship Layer or remaining lifecycle semantics, depending on owner priority.
 
 ## 1. Stabilization Gate
 
@@ -75,10 +76,15 @@
 
 ## 8. Google Calendar Read-First Sync
 
-- Make Google pull/reconcile the default safe path.
-- Keep work-sync policy explicit.
-- Add conflict review and safe-slot proposals before writes.
-- Add tests for echo skipping, imported events, conflicts, and delete/update failures.
+- Completed: normalized fake-tested Google event formatter for Telegram-safe output.
+- Completed: `ENABLE_GOOGLE_WRITES=false` default gate prevents task sync create/update/delete calls to Google Calendar.
+- Completed: `/gcal_today` uses read-only normalized `list_events()`.
+- Completed: `/gcal_tomorrow` uses the same read-only path.
+- Completed: pure advisory conflict detector for Google event vs local timed task and Google event vs prayer protected window.
+- Completed: `/gcal_conflicts` reports today's advisory conflicts and requires owner action.
+- Completed: morning/evening Google sections can show a short conflict-count hint.
+- Completed: `/gcal_pull` text clarifies read/import-local behavior and no Google writes.
+- Remaining: richer Google conflict action buttons, preview-only import mode if desired, and deeper reconciliation tests for echo/import/update/delete failure cases.
 
 ## 9. Family/Relationship Layer
 

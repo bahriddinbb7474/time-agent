@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 12 Morning Briefing Upgrade is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, prayer protected scheduling hardening, `/focus`, `/crisis`, the 21:00 evening planning summary, and the 08:30 morning ready-plan briefing are now in place.
+Stage 13 Google Calendar Read-First Sync is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, prayer protected scheduling hardening, `/focus`, `/crisis`, the 21:00 evening planning summary, the 08:30 morning ready-plan briefing, and Google Calendar read-first safeguards are now in place.
 
 ## Working Features Visible in Code
 
@@ -19,7 +19,8 @@ Stage 12 Morning Briefing Upgrade is complete. The project remains pre-productio
 - Prayer protected windows use Hanafi `school=1`, `Asia/Tashkent`, 15 minutes before prayer, 20 minutes after prayer, and the Dhuhr `13:00-13:20` dead zone.
 - `/add` and `/edit` do not silently create/update tasks inside prayer conflicts; they warn and suggest a safe slot when available.
 - Quran follow-up alerts are postponed during cached prayer protected windows; hydration runtime pings are skipped during cached prayer protected windows.
-- Google Calendar OAuth, event reads, pull/reconcile, and category-limited write sync.
+- Google Calendar OAuth, normalized event reads, `/gcal_today`, `/gcal_tomorrow`, `/gcal_conflicts`, pull/import-local reconcile, and read-first write gate.
+- Google Calendar event writes are disabled by default through `ENABLE_GOOGLE_WRITES=false`.
 - Persistent alert queue with recovery after restart.
 - Morning briefing at 08:30 and evening summary at 21:00 Asia/Tashkent.
 - Morning briefing now acts as a short ready plan for today with local tasks, soft focus/crisis context, read-only Google Calendar today context, prayer status, Quran/health/siyam context, and a gentle Later Inbox count.
@@ -62,7 +63,10 @@ Stage 12 Morning Briefing Upgrade is complete. The project remains pre-productio
 - Boss alert cleanup on task done is still separate from focus/crisis mode.
 - Focus/crisis mode does not use AI planning and does not autonomously reschedule tasks.
 - DB-backed prayer window settings are not implemented; Stage 9 uses code-level constants.
-- Google Calendar prayer conflict review for imported external events remains future work.
+- Google Calendar write-capable service methods still exist, but task sync write paths are gated by config and disabled by default.
+- `/gcal_pull` still writes local DB rows when importing/reconciling Google events; it does not write Google Calendar.
+- Google conflict reporting is advisory only; no local task moving and no Google event changes are performed.
+- No Google conflict action buttons were added in Stage 13.
 
 ## Production Readiness
 
@@ -78,6 +82,7 @@ Docker/env/secrets safe now:
 - `TZ=Asia/Tashkent` is set in Compose and supported by container `tzdata`.
 - `restart: always` is configured.
 - Debug/test commands default to disabled.
+- Google Calendar writes default to disabled.
 
 Blocking items:
 

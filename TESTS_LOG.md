@@ -146,6 +146,18 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - No `DailyPlan` storage, `completed_at` tracking, AI planning, silent task moving, migrations, or production DB writes were added.
 - Bot was not started.
 
+## Stage 13 Google Calendar Read-First Sync Verification
+
+- Google read-first smoke test passed with fake Google data and an isolated temporary SQLite DB.
+- Event formatter covers timed, all-day, cancelled/no-output, capped Telegram-safe output, and hidden IDs/links.
+- `ENABLE_GOOGLE_WRITES=false` gate prevents fake task-sync Google create/update/delete calls while keeping local task creation.
+- `/gcal_today`, `/gcal_tomorrow`, and `/gcal_conflicts` were verified by `py_compile` and safe source search.
+- Google conflict detector covers Google event vs local timed task and Google event vs cached prayer protected window.
+- Morning and evening conflict hints were verified through existing smoke tests.
+- `/gcal_pull` wording now clarifies read/import-local behavior and no Google writes.
+- No real Google API calls were made in tests.
+- No migrations, bot startup, silent rescheduling, AI planning, Google writes, or production DB writes were added.
+
 ## Stage 6 Closeout Verification
 
 - Root info docs exist.

@@ -22,7 +22,8 @@ Telegram-first personal mental load dispatcher for tasks, reminders, protected t
 - Persistent reminders backed by SQLite `alert_queue`.
 - Morning briefing and evening summary jobs.
 - Google Calendar connect/read/debug/pull commands.
-- Category-based Google sync: work can sync; personal/family/health/prayer stay local or restricted.
+- Google Calendar read-first commands: `/gcal_today`, `/gcal_tomorrow`, `/gcal_conflicts`.
+- Category-based Google sync is write-gated by `ENABLE_GOOGLE_WRITES=false` by default; personal/family/health/prayer stay local or restricted.
 - Quran progress tracking and evening follow-up.
 - Basic family contact reminder candidates.
 - Boss/critical alert foundation.
@@ -41,6 +42,7 @@ Required or used variables visible in code:
 - `ALLOWED_TELEGRAM_ID`
 - `TZ` defaults to `Asia/Tashkent`
 - `ENABLE_DEBUG_COMMANDS` defaults to `false`
+- `ENABLE_GOOGLE_WRITES` defaults to `false`
 - `GCAL_CREDENTIALS_PATH`
 - `GCAL_TOKEN_PATH`
 - `GCAL_OAUTH_REDIRECT_URI`
