@@ -20,6 +20,7 @@ from app.services.capture_router_service import (
     CaptureDraft,
     CaptureRouterService,
 )
+from app.services.stt_provider import DisabledSTTProvider
 
 
 router = Router()
@@ -43,6 +44,14 @@ def build_capture_confirmation_keyboard() -> InlineKeyboardMarkup:
             for button in build_capture_button_specs()
         ]
     )
+
+
+@router.message(F.voice)
+async def capture_voice_message(message: Message):
+    result = await DisabledSTTProvider().transcribe_voice(
+        message.voice.file_id if message.voice else ""
+    )
+    await message.answer(result.user_message)
 
 
 @router.message(F.text)
