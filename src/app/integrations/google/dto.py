@@ -44,7 +44,8 @@ class GooglePullSummaryDTO:
 
     def to_user_text(self) -> str:
         lines = [
-            "✅ Google pull завершён.",
+            "✅ Google read/import complete.",
+            "Google writes: none.",
             f"imported: {self.imported}",
             f"updated: {self.updated}",
             f"skipped: {self.skipped}",
