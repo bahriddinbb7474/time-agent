@@ -230,6 +230,7 @@ async def evening_summary(bot) -> None:
         task_service = TaskService(session)
         timed, floating = await task_service.list_today()
         unfinished_tasks = timed + floating
+        done_today = await task_service.list_done_for_date(datetime.now(APP_TZ).date())
         later_items = await task_service.list_later(limit=5)
         tomorrow_tasks = await task_service.list_tomorrow()
         quran_service = QuranService(session)
@@ -271,6 +272,7 @@ async def evening_summary(bot) -> None:
 
         message = build_evening_planning_message(
             EveningPlanningInput(
+                done_today=done_today,
                 unfinished_tasks=unfinished_tasks,
                 later_items=later_items,
                 tomorrow_tasks=tomorrow_tasks,

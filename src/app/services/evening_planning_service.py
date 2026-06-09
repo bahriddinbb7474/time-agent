@@ -8,6 +8,7 @@ from app.services.crisis_stack_service import CrisisStackService
 
 @dataclass(slots=True)
 class EveningPlanningInput:
+    done_today: Sequence = field(default_factory=list)
     unfinished_tasks: Sequence = field(default_factory=list)
     later_items: Sequence = field(default_factory=list)
     tomorrow_tasks: Sequence = field(default_factory=list)
@@ -20,14 +21,13 @@ class EveningPlanningInput:
 def build_evening_planning_message(data: EveningPlanningInput) -> str:
     lines: list[str] = [
         "🕘 Вечерний план",
-        "",
-        "Закрытые сегодня пока не отслеживаются.",
     ]
 
     _append_text_section(lines, "🕋 Намазы", data.prayer_lines)
     _append_text_section(lines, "📖 Коран", data.quran_lines)
     _append_text_section(lines, "💧 Здоровье/сиям", data.health_lines)
 
+    _append_done_today_section(lines, data.done_today)
     _append_focus_section(lines, data.unfinished_tasks)
     _append_task_section(
         lines,
@@ -52,6 +52,20 @@ def build_evening_planning_message(data: EveningPlanningInput) -> str:
 
     lines.extend(["", "Что главное завтра?"])
     return "\n".join(lines)
+
+
+def _append_done_today_section(lines: list[str], tasks: Sequence, limit: int = 5) -> None:
+    lines.append("")
+    lines.append("Done today")
+    if not tasks:
+        lines.append("• 0")
+        return
+
+    lines.append(f"• count: {len(tasks)}")
+    for task in list(tasks)[:limit]:
+        lines.append(f"• {_format_task(task)}")
+    if len(tasks) > limit:
+        lines.append(f"• more: {len(tasks) - limit}")
 
 
 def _append_text_section(

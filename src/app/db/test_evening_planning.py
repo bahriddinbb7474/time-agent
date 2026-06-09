@@ -93,6 +93,16 @@ async def main():
                         created_at=now,
                     ),
                     Task(
+                        title="Completed with timestamp",
+                        planned_at=today_at,
+                        duration_min=30,
+                        status="done",
+                        category="work",
+                        context_status="normal",
+                        created_at=now,
+                        completed_at=now,
+                    ),
+                    Task(
                         title="Hidden cancelled tomorrow",
                         planned_at=tomorrow_at,
                         duration_min=30,
@@ -119,6 +129,9 @@ async def main():
             tomorrow_titles = [task.title for task in tomorrow_tasks]
             assert tomorrow_titles == ["Tomorrow planning call"]
 
+            done_today = await task_service.list_done_for_date(now.date())
+            assert [task.title for task in done_today] == ["Completed with timestamp"]
+
             focus_task = CrisisStackService.select_focus_task(timed + floating)
             assert focus_task is not None
             assert focus_task.title == "Срочно проверить договор"
@@ -126,6 +139,7 @@ async def main():
 
             message = build_evening_planning_message(
                 EveningPlanningInput(
+                    done_today=done_today,
                     unfinished_tasks=timed + floating,
                     later_items=later_items,
                     tomorrow_tasks=tomorrow_tasks,
@@ -137,7 +151,9 @@ async def main():
             )
 
             assert "Вечерний план" in message
-            assert "Закрытые сегодня пока не отслеживаются." in message
+            assert "Done today" in message
+            assert "Completed with timestamp" in message
+            assert "Hidden done task" not in message
             assert "Finish report" in message
             assert "Срочно проверить договор" in message
             assert "Call supplier" in message
