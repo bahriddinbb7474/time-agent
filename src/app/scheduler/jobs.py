@@ -12,6 +12,10 @@ from app.db.models import AlertQueue
 from app.services.boss_priority_service import BossPriorityService
 from app.services.family_contact_service import FamilyContactService
 from app.services.daily_context_service import DailyContextService
+from app.services.evening_planning_service import (
+    EveningPlanningInput,
+    build_evening_planning_message,
+)
 from app.services.prayer_times_service import PrayerTimesService
 from app.services.prayer_protection import (
     intervals_overlap,
@@ -205,20 +209,14 @@ async def evening_summary(bot) -> None:
     async with Session() as session:
         task_service = TaskService(session)
         timed, floating = await task_service.list_today()
+        unfinished_tasks = timed + floating
         later_items = await task_service.list_later(limit=5)
+        tomorrow_tasks = await task_service.list_tomorrow()
         quran_service = QuranService(session)
         quran_summary = await quran_service.get_daily_summary()
         prayer_section = await _build_prayer_status_section(session)
-
-        critical_tasks = [
-            t
-            for t in (timed + floating)
-            if "🔥" in t.title or t.title.lower().startswith("шеф срочно:")
-        ]
-
-        open_tasks = [t for t in (timed + floating) if t.status != "done"]
-
         quran_lines = [quran_service.build_deficit_message(quran_summary)]
+        health_lines = await _build_health_status_section(session)
 
         followup_keyboard = None
         if not quran_summary.goal_reached and cfg.allowed_telegram_id:
@@ -242,47 +240,22 @@ async def evening_summary(bot) -> None:
                 ]
             )
 
-    lines = ["🕘 Вечерний spiritual report\n"]
-
-    lines.append("🕋 Намазы")
-    lines.extend(prayer_section)
-
-    lines.append("\n📖 Коран")
-    lines.extend(quran_lines)
-
-    lines.append("\n🔥 Critical задачи")
-    if critical_tasks:
-        for t in critical_tasks:
-            if t.planned_at:
-                lines.append(f"• #{t.id} {t.planned_at} — {t.title} [{t.status}]")
-            else:
-                lines.append(f"• #{t.id} — {t.title} [{t.status}]")
-    else:
-        lines.append("• Активных critical задач нет.")
-
-    lines.append("\n📌 Что осталось закрыть сегодня")
-    if open_tasks:
-        for t in open_tasks:
-            if t.planned_at:
-                lines.append(f"• #{t.id} {t.planned_at} — {t.title} [{t.status}]")
-            else:
-                lines.append(f"• #{t.id} — {t.title} [{t.status}]")
-    else:
-        lines.append("• Всё закрыто ✅")
-
-    lines.append("\n📝 На потом")
-    if later_items:
-        lines.append(f"• Всего в обзоре: {len(later_items)}. Посмотреть: /backlog")
-        for item in later_items:
-            lines.append(f"• #{item.id} — {item.title}")
-    else:
-        lines.append("• Пусто.")
+        message = build_evening_planning_message(
+            EveningPlanningInput(
+                unfinished_tasks=unfinished_tasks,
+                later_items=later_items,
+                tomorrow_tasks=tomorrow_tasks,
+                prayer_lines=prayer_section,
+                quran_lines=quran_lines,
+                health_lines=health_lines,
+            )
+        )
 
     if cfg.allowed_telegram_id:
         await _send_hydration_runtime_ping(bot=bot, chat_id=cfg.allowed_telegram_id)
         await bot.send_message(
             cfg.allowed_telegram_id,
-            "\n".join(lines),
+            message,
             reply_markup=followup_keyboard,
         )
 
@@ -1001,6 +974,23 @@ async def _build_prayer_status_section(session) -> list[str]:
             lines.append(f"• {prayer_name}: цикл остановлен")
         else:
             lines.append(f"• {prayer_name}: {alert.status}")
+
+    return lines
+
+
+async def _build_health_status_section(session) -> list[str]:
+    today = datetime.now(APP_TZ).date()
+    policy = await DailyContextService(session).get_policy_for_date(today)
+    if policy is None:
+        return []
+
+    lines = [
+        "• Сиям: день поста" if policy.is_siyam_day else "• Сиям: обычный день"
+    ]
+    if policy.low_energy_mode:
+        lines.append("• Энергия: бережный режим")
+    if policy.hydration_daylight_suppressed:
+        lines.append("• Вода: дневные напоминания приглушены")
 
     return lines
 
