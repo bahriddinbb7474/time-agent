@@ -106,12 +106,18 @@ async def main():
             assert "Срочно скрытая cancelled задача" not in floating_titles
             assert floating_titles[0] == "Срочно отправить договор"
 
+            focus_task = CrisisStackService.select_focus_task(floating)
+            assert focus_task is not None
+            assert focus_task.title == "Срочно отправить договор"
+
             urgent_count = sum(
                 1
                 for task in floating
                 if CrisisStackService.is_urgent_text(task.title)
             )
             assert urgent_count == 2
+            assert CrisisStackService.is_crisis(floating)
+            assert not CrisisStackService.is_crisis([floating[0]])
 
         await engine.dispose()
 
