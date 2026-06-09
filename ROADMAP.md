@@ -8,7 +8,8 @@
 - Stage 9 Prayer Protected Scheduling hardening: done.
 - Stage 10 Focus / Crisis Mode: done.
 - Stage 11 Evening Planning Engine: done.
-- Next stage: Morning Briefing, with remaining lifecycle semantics tracked separately.
+- Stage 12 Morning Briefing Upgrade: done.
+- Next stage: Google Calendar Read-First Sync, with remaining lifecycle semantics tracked separately.
 
 ## 1. Stabilization Gate
 
@@ -66,9 +67,10 @@
 
 ## 7. Morning Briefing
 
-- Expand morning briefing into actionable daily plan.
-- Include protected slots, prayer windows, Google Calendar read view, Later Inbox, and top priorities.
-- Add buttons to accept, adjust, or defer.
+- Completed: morning briefing is now a short ready plan for today.
+- Completed: includes local today tasks, soft focus/crisis context, prayer status, Quran/health/siyam context, read-only Google Calendar today context, and a gentle Later Inbox count.
+- Completed: keeps the existing 08:30 scheduler and debug-gated `/test_brief` trigger.
+- Remaining: no `DailyPlan` storage, no `completed_at`/done-today tracking, no AI planning, no Google writes, and no silent rescheduling.
 - Later: consume stored evening plan only after a storage/approval model is designed.
 
 ## 8. Google Calendar Read-First Sync

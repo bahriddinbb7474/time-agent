@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 11 Evening Planning Engine is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, prayer protected scheduling hardening, `/focus`, `/crisis`, and the 21:00 evening planning summary are now in place.
+Stage 12 Morning Briefing Upgrade is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, prayer protected scheduling hardening, `/focus`, `/crisis`, the 21:00 evening planning summary, and the 08:30 morning ready-plan briefing are now in place.
 
 ## Working Features Visible in Code
 
@@ -22,6 +22,7 @@ Stage 11 Evening Planning Engine is complete. The project remains pre-production
 - Google Calendar OAuth, event reads, pull/reconcile, and category-limited write sync.
 - Persistent alert queue with recovery after restart.
 - Morning briefing at 08:30 and evening summary at 21:00 Asia/Tashkent.
+- Morning briefing now acts as a short ready plan for today with local tasks, soft focus/crisis context, read-only Google Calendar today context, prayer status, Quran/health/siyam context, and a gentle Later Inbox count.
 - Evening summary now acts as a short planning session with unfinished tasks, Later Inbox, focus/crisis hint, tomorrow local tasks, Quran/health/prayer status, read-only Google Calendar tomorrow context, and the prompt `Что главное завтра?`.
 - Prayer time cache and prayer reminders.
 - Quran progress tracking and daily goal follow-up.
@@ -36,6 +37,7 @@ Stage 11 Evening Planning Engine is complete. The project remains pre-production
 - Safe prayer validation/recovery smoke test uses an isolated temporary SQLite DB.
 - Safe focus/crisis smoke test uses an isolated temporary SQLite DB.
 - Safe evening planning smoke test uses an isolated temporary SQLite DB.
+- Safe morning briefing smoke test uses an isolated temporary SQLite DB.
 
 ## Broken or Incomplete Parts
 
@@ -53,6 +55,9 @@ Stage 11 Evening Planning Engine is complete. The project remains pre-production
 - Done-today review is not accurate yet because tasks do not have `completed_at` tracking.
 - Morning briefing does not consume stored evening output yet.
 - Owner still creates tomorrow tasks manually with `/add`, `/later`, or `/boss`.
+- Morning briefing has no AI planning and does not move/reschedule tasks.
+- Morning Google Calendar context is read-only and degrades quietly when unavailable.
+- Later Inbox appears in morning only as a gentle count.
 - Boss alert suppression during prayer is intentionally unresolved and not implemented.
 - Boss alert cleanup on task done is still separate from focus/crisis mode.
 - Focus/crisis mode does not use AI planning and does not autonomously reschedule tasks.

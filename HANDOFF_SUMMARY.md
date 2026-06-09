@@ -16,6 +16,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Stage 9 Prayer Protected Scheduling hardening is complete.
 - Stage 10 Focus / Crisis Mode is complete.
 - Stage 11 Evening Planning Engine is complete.
+- Stage 12 Morning Briefing Upgrade is complete.
 
 ## What Works in Code
 
@@ -34,6 +35,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - `/today` includes a short focus/crisis hint; `/done` and `task_done:<id>` can suggest the next focus.
 - Morning briefing and evening summary jobs.
 - Evening summary is now a short 21:00 planning session with unfinished tasks, Later Inbox, focus/crisis hint, tomorrow local tasks, Quran/health/prayer status, read-only Google Calendar tomorrow context, and `Что главное завтра?`.
+- Morning briefing is now a short 08:30 ready plan with local today tasks, soft focus/crisis context, read-only Google Calendar today context, prayer status, Quran/health/siyam context, and a gentle Later Inbox count.
 - Quran progress and follow-up reminders.
 - Basic family contact candidate generation.
 - Boss/critical persistent alert queue.
@@ -52,6 +54,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Focus/crisis mode is deterministic only: no AI planning and no autonomous rescheduling.
 - Evening planning is message-only: no `DailyPlan` storage, no `completed_at`/done-today tracking, and no stored evening output for morning briefing yet.
 - Owner still creates tomorrow tasks manually with `/add`, `/later`, or `/boss`.
+- Morning briefing does not use AI planning, does not write Google Calendar, and does not silently reschedule tasks.
 - Boss alert suppression during prayer is unresolved and not implemented.
 - Google Calendar imported-event prayer conflict review remains future work.
 - Prayer window settings are code-level constants, not DB-backed settings.
@@ -59,4 +62,4 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 
 ## Next Priority
 
-Morning Briefing, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, Google Calendar lifecycle policy, and a future storage/approval model for evening plans.
+Google Calendar Read-First Sync, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, Google Calendar lifecycle policy, and a future storage/approval model for evening plans.

@@ -9,6 +9,7 @@
 - `src/app/db/test_prayer_validation.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_focus_crisis.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_evening_planning.py` is a manual async smoke test using an isolated temporary SQLite DB.
+- `src/app/db/test_morning_briefing.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - Handler names `test_brief_cmd` and `test_evening_cmd` are Telegram command handlers, not tests.
 
 ## Tests Run
@@ -60,6 +61,14 @@ $env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages";
 ```
 
 This verifies evening planning source data, tomorrow local task query, formatter output, Later Inbox inclusion, focus hint input, Google Calendar tomorrow formatting input, and Quran follow-up alert reuse against a temporary SQLite DB only.
+
+Safe morning briefing smoke command:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages"; & "C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe" src/app/db/test_morning_briefing.py
+```
+
+This verifies morning briefing source data, active today filtering, Later Inbox count, focus hint input, formatter output, Google Calendar today formatting input, and Google unavailable fallback against a temporary SQLite DB only.
 
 Python note: the documented Python path requires existing `.venv\Lib\site-packages` on `PYTHONPATH` for project dependencies in this environment. `.venv\Scripts\python.exe` exists but its launcher is broken.
 
@@ -127,6 +136,16 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - No `DailyPlan` storage, `completed_at` tracking, AI planning, silent task moving, migrations, or production DB writes were added.
 - Bot was not started.
 
+## Stage 12 Morning Briefing Upgrade Verification
+
+- Morning briefing smoke test passed against an isolated temporary SQLite DB.
+- The 08:30 morning briefing uses a pure formatter and keeps Telegram sending in the scheduler job.
+- Active today tasks exclude `done`, `cancelled`, and `later`.
+- Later Inbox appears only as a gentle count.
+- Google Calendar today context is read-only and degrades quietly when credentials or access are unavailable.
+- No `DailyPlan` storage, `completed_at` tracking, AI planning, silent task moving, migrations, or production DB writes were added.
+- Bot was not started.
+
 ## Stage 6 Closeout Verification
 
 - Root info docs exist.
@@ -149,6 +168,7 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Handler-level tests for `/later`, `/backlog`, and `/boss`.
 - Handler-level tests for `/focus`, `/crisis`, `/today` focus hint, and next-focus-after-done messages.
 - Handler/job-level tests for rendered evening summary delivery.
+- Handler/job-level tests for rendered morning briefing delivery.
 - Tests for future `DailyPlan` storage and morning briefing consumption after that model is designed.
 - Tests for completed-at/done-today tracking after schema support exists.
 - Tests for promoting Later Inbox items into scheduled tasks.
