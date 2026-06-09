@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import APP_TZ, now_tz
 from app.services.crisis_stack_service import CrisisStackService
+from app.services.daily_plan_service import DailyPlanService
 from app.services.google_calendar_service import GoogleCalendarService
 from app.services.task_service import TaskService
 from app.services.task_sync_service import TaskSyncService
@@ -321,6 +322,19 @@ async def boss_cmd(message: Message, session: AsyncSession):
         user_id=message.from_user.id if message.from_user else None,
     )
     await message.answer(f"Boss задача: #{task.id}")
+
+
+@router.message(Command("plan_tomorrow"))
+async def plan_tomorrow_cmd(message: Message, session: AsyncSession):
+    payload = message.text.removeprefix("/plan_tomorrow").strip()
+
+    if not payload:
+        await message.answer("Формат: /plan_tomorrow текст")
+        return
+
+    plan_date = now_tz().date() + timedelta(days=1)
+    await DailyPlanService(session).save_plan(plan_date=plan_date, text=payload)
+    await message.answer("План на завтра сохранён.")
 
 
 @router.callback_query(F.data.startswith("task_done:"))
