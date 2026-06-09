@@ -14,7 +14,11 @@ if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
 
 from app.core.time import APP_TZ, now_tz
 from app.db.models import Base, Task
-from app.scheduler.jobs import _collect_morning_briefing_input
+from app.scheduler.jobs import (
+    _build_google_today_section,
+    _collect_morning_briefing_input,
+    _format_google_today_event,
+)
 from app.services.crisis_stack_service import CrisisStackService
 from app.services.morning_briefing_service import (
     MorningBriefingInput,
@@ -127,6 +131,8 @@ async def main():
             google_summaries = [event.summary for event in fake_google_events]
             assert google_summaries == ["Daily sync", "Conference day"]
             assert fake_google_events[0].start_at.astimezone(APP_TZ).strftime("%H:%M") == "09:30"
+            assert _format_google_today_event(fake_google_events[0]) == "• 09:30 — Daily sync"
+            assert _format_google_today_event(fake_google_events[1]) == "• весь день — Conference day"
 
             message = build_morning_briefing_message(
                 MorningBriefingInput(
@@ -161,6 +167,15 @@ async def main():
             assert collected.prayer_lines
             assert collected.quran_lines
             assert collected.health_lines
+
+            collected_with_google = await _collect_morning_briefing_input(
+                session,
+                session_factory=Session,
+            )
+            assert collected_with_google.google_today_lines == ["• недоступен"]
+
+            unavailable_google = await _build_google_today_section(Session)
+            assert unavailable_google == ["• недоступен"]
 
         await engine.dispose()
 
