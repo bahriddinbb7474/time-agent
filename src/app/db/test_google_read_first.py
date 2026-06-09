@@ -11,11 +11,16 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.db.models import Base
 from app.core.time import APP_TZ
 from app.integrations.google.dto import GoogleEventDTO
-from app.services.task_sync_service import TaskSyncService
+from app.services.google_conflict_detector import (
+    detect_google_conflicts,
+    format_google_conflict_lines,
+)
 from app.services.google_event_formatter import (
     format_google_event_line,
     format_google_event_lines,
 )
+from app.services.prayer_times_service import PrayerTimesDTO
+from app.services.task_sync_service import TaskSyncService
 
 
 @dataclass(slots=True)
@@ -107,6 +112,51 @@ async def main():
     assert "secret-event-id" not in rendered
     assert "calendar.example" not in rendered
     assert "primary" not in rendered
+
+    local_task = type(
+        "LocalTask",
+        (),
+        {
+            "title": "Local focused work",
+            "planned_at": "09:45",
+            "duration_min": 30,
+        },
+    )()
+    prayer_times = PrayerTimesDTO(
+        date=start_at.date(),
+        fajr=datetime(2026, 6, 9, 4, 0, tzinfo=APP_TZ).time(),
+        dhuhr=datetime(2026, 6, 9, 12, 30, tzinfo=APP_TZ).time(),
+        asr=datetime(2026, 6, 9, 16, 45, tzinfo=APP_TZ).time(),
+        maghrib=datetime(2026, 6, 9, 19, 30, tzinfo=APP_TZ).time(),
+        isha=datetime(2026, 6, 9, 21, 0, tzinfo=APP_TZ).time(),
+    )
+    prayer_event = GoogleEventDTO(
+        external_id="prayer-secret-id",
+        calendar_id="primary",
+        summary="Late meeting",
+        description="",
+        start_at=datetime(2026, 6, 9, 16, 35, tzinfo=APP_TZ),
+        end_at=datetime(2026, 6, 9, 17, 0, tzinfo=APP_TZ),
+        all_day=False,
+        status="confirmed",
+        updated_at=None,
+        html_link=None,
+        local_task_id=None,
+        source_marker=None,
+    )
+    conflicts = detect_google_conflicts(
+        events=[timed, all_day, cancelled, prayer_event],
+        local_tasks=[local_task],
+        day=start_at.date(),
+        prayer_times=prayer_times,
+    )
+    assert [conflict.kind for conflict in conflicts] == [
+        "task_overlap",
+        "prayer_overlap",
+    ]
+    conflict_text = "\n".join(format_google_conflict_lines(conflicts))
+    assert "secret-id" not in conflict_text
+    assert "calendar.example" not in conflict_text
 
     fake_service = FakeWriteService()
     await _maybe_write_when_enabled(writes_enabled=False, service=fake_service)
