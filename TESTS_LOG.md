@@ -8,6 +8,7 @@
 - `src/app/db/test_later_inbox.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_prayer_validation.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_focus_crisis.py` is a manual async smoke test using an isolated temporary SQLite DB.
+- `src/app/db/test_evening_planning.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - Handler names `test_brief_cmd` and `test_evening_cmd` are Telegram command handlers, not tests.
 
 ## Tests Run
@@ -51,6 +52,14 @@ $env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages";
 ```
 
 This verifies urgent detection, active filtering excluding `done`/`cancelled`/`later`, focus selector behavior, crisis threshold behavior, and active focus candidate query against a temporary SQLite DB only.
+
+Safe evening planning smoke command:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages"; & "C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe" src/app/db/test_evening_planning.py
+```
+
+This verifies evening planning source data, tomorrow local task query, formatter output, Later Inbox inclusion, focus hint input, Google Calendar tomorrow formatting input, and Quran follow-up alert reuse against a temporary SQLite DB only.
 
 Python note: the documented Python path requires existing `.venv\Lib\site-packages` on `PYTHONPATH` for project dependencies in this environment. `.venv\Scripts\python.exe` exists but its launcher is broken.
 
@@ -108,6 +117,16 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - No AI planning and no autonomous rescheduling were added.
 - Bot was not started.
 
+## Stage 11 Evening Planning Engine Verification
+
+- Evening planning smoke test passed against an isolated temporary SQLite DB.
+- The 21:00 evening summary uses a pure formatter and keeps Telegram sending in the scheduler job.
+- Tomorrow local tasks are read through the existing `tasks` table and exclude `done`, `cancelled`, and `later`.
+- Google Calendar tomorrow context is read-only and degrades quietly when credentials or access are unavailable.
+- Quran follow-up alert reuse is covered by a regression check that keeps one active alert for the same day.
+- No `DailyPlan` storage, `completed_at` tracking, AI planning, silent task moving, migrations, or production DB writes were added.
+- Bot was not started.
+
 ## Stage 6 Closeout Verification
 
 - Root info docs exist.
@@ -129,6 +148,9 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Handler-level tests for `/done` and `task_done:<id>`.
 - Handler-level tests for `/later`, `/backlog`, and `/boss`.
 - Handler-level tests for `/focus`, `/crisis`, `/today` focus hint, and next-focus-after-done messages.
+- Handler/job-level tests for rendered evening summary delivery.
+- Tests for future `DailyPlan` storage and morning briefing consumption after that model is designed.
+- Tests for completed-at/done-today tracking after schema support exists.
 - Tests for promoting Later Inbox items into scheduled tasks.
 - Tests for boss alert cleanup when a boss task is marked done.
 - ContextValidator tests for sleep, second sleep, protected slots, and Siyam warnings.

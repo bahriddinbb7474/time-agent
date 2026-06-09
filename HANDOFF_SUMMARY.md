@@ -15,6 +15,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Stage 8 Capture Mode + Later Inbox is complete.
 - Stage 9 Prayer Protected Scheduling hardening is complete.
 - Stage 10 Focus / Crisis Mode is complete.
+- Stage 11 Evening Planning Engine is complete.
 
 ## What Works in Code
 
@@ -32,6 +33,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - `/focus` suggests one deterministic active task; `/crisis` shows an urgent stack when 2+ urgent active tasks exist.
 - `/today` includes a short focus/crisis hint; `/done` and `task_done:<id>` can suggest the next focus.
 - Morning briefing and evening summary jobs.
+- Evening summary is now a short 21:00 planning session with unfinished tasks, Later Inbox, focus/crisis hint, tomorrow local tasks, Quran/health/prayer status, read-only Google Calendar tomorrow context, and `Что главное завтра?`.
 - Quran progress and follow-up reminders.
 - Basic family contact candidate generation.
 - Boss/critical persistent alert queue.
@@ -48,6 +50,8 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Boss alert cleanup on task done is still a follow-up.
 - Persistent crisis stack DB flow is not implemented yet.
 - Focus/crisis mode is deterministic only: no AI planning and no autonomous rescheduling.
+- Evening planning is message-only: no `DailyPlan` storage, no `completed_at`/done-today tracking, and no stored evening output for morning briefing yet.
+- Owner still creates tomorrow tasks manually with `/add`, `/later`, or `/boss`.
 - Boss alert suppression during prayer is unresolved and not implemented.
 - Google Calendar imported-event prayer conflict review remains future work.
 - Prayer window settings are code-level constants, not DB-backed settings.
@@ -55,4 +59,4 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 
 ## Next Priority
 
-Evening Planning Engine, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, and Google Calendar lifecycle policy.
+Morning Briefing, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, Google Calendar lifecycle policy, and a future storage/approval model for evening plans.

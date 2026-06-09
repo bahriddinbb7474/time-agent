@@ -7,7 +7,8 @@
 - Stage 8 Capture Mode + Later Inbox: done.
 - Stage 9 Prayer Protected Scheduling hardening: done.
 - Stage 10 Focus / Crisis Mode: done.
-- Next stage: Evening Planning Engine, with remaining lifecycle semantics tracked separately.
+- Stage 11 Evening Planning Engine: done.
+- Next stage: Morning Briefing, with remaining lifecycle semantics tracked separately.
 
 ## 1. Stabilization Gate
 
@@ -57,15 +58,18 @@
 
 ## 6. Evening Planning Engine
 
-- Turn evening summary into planning flow.
-- Review unfinished tasks, Quran status, prayer status, health context, and tomorrow candidates.
-- Require owner approval before creating or moving tasks.
+- Completed: evening summary is now a short 21:00 planning flow.
+- Completed: review includes unfinished tasks, Later Inbox, focus/crisis hint, tomorrow local tasks, Quran status, prayer status, health/siyam context, and read-only Google Calendar tomorrow context.
+- Completed: final prompt asks `Что главное завтра?`.
+- Completed: Quran follow-up alert reuse has a temp-DB regression check.
+- Remaining: no `DailyPlan` storage, no `completed_at`/done-today tracking, and no silent task moving or automatic tomorrow task creation.
 
 ## 7. Morning Briefing
 
 - Expand morning briefing into actionable daily plan.
 - Include protected slots, prayer windows, Google Calendar read view, Later Inbox, and top priorities.
 - Add buttons to accept, adjust, or defer.
+- Later: consume stored evening plan only after a storage/approval model is designed.
 
 ## 8. Google Calendar Read-First Sync
 

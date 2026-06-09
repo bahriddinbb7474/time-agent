@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 10 Focus / Crisis Mode is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, evening Later review, prayer protected scheduling hardening, `/focus`, and `/crisis` are now in place.
+Stage 11 Evening Planning Engine is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, prayer protected scheduling hardening, `/focus`, `/crisis`, and the 21:00 evening planning summary are now in place.
 
 ## Working Features Visible in Code
 
@@ -22,6 +22,7 @@ Stage 10 Focus / Crisis Mode is complete. The project remains pre-production, bu
 - Google Calendar OAuth, event reads, pull/reconcile, and category-limited write sync.
 - Persistent alert queue with recovery after restart.
 - Morning briefing at 08:30 and evening summary at 21:00 Asia/Tashkent.
+- Evening summary now acts as a short planning session with unfinished tasks, Later Inbox, focus/crisis hint, tomorrow local tasks, Quran/health/prayer status, read-only Google Calendar tomorrow context, and the prompt `Что главное завтра?`.
 - Prayer time cache and prayer reminders.
 - Quran progress tracking and daily goal follow-up.
 - Siyam explicit toggle and Monday/Thursday heuristic fallback.
@@ -34,6 +35,7 @@ Stage 10 Focus / Crisis Mode is complete. The project remains pre-production, bu
 - Safe Later Inbox smoke test uses an isolated temporary SQLite DB.
 - Safe prayer validation/recovery smoke test uses an isolated temporary SQLite DB.
 - Safe focus/crisis smoke test uses an isolated temporary SQLite DB.
+- Safe evening planning smoke test uses an isolated temporary SQLite DB.
 
 ## Broken or Incomplete Parts
 
@@ -47,7 +49,10 @@ Stage 10 Focus / Crisis Mode is complete. The project remains pre-production, bu
 - Family layer is candidate/log oriented, not a full task lifecycle.
 - Local task `done` and Later Inbox `status="later"` capture are implemented; `moved`, `skipped`, `postponed`, and `cancelled` task lifecycle semantics are not implemented yet.
 - Marking a task done is local-only and does not update/delete Google Calendar events.
-- Later Inbox appears in evening summary, but full evening/morning planning engines and owner approval workflow are not complete.
+- Evening planning is message-only; no `DailyPlan` storage exists yet.
+- Done-today review is not accurate yet because tasks do not have `completed_at` tracking.
+- Morning briefing does not consume stored evening output yet.
+- Owner still creates tomorrow tasks manually with `/add`, `/later`, or `/boss`.
 - Boss alert suppression during prayer is intentionally unresolved and not implemented.
 - Boss alert cleanup on task done is still separate from focus/crisis mode.
 - Focus/crisis mode does not use AI planning and does not autonomously reschedule tasks.
