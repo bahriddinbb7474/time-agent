@@ -17,6 +17,7 @@ from app.services.evening_planning_service import (
     build_evening_planning_message,
 )
 from app.services.google_calendar_service import GoogleCalendarService
+from app.services.google_conflict_detector import detect_google_conflicts
 from app.services.morning_briefing_service import (
     MorningBriefingInput,
     build_morning_briefing_message,
@@ -101,7 +102,13 @@ async def _collect_morning_briefing_input(
 
     google_today_lines = []
     if session_factory is not None:
-        google_today_lines = await _build_google_today_section(session_factory)
+        today = datetime.now(APP_TZ).date()
+        prayer_times = await PrayerTimesService(session).get_cached_prayer_times(today)
+        google_today_lines = await _build_google_today_section(
+            session_factory,
+            local_tasks=timed,
+            prayer_times=prayer_times,
+        )
 
     return MorningBriefingInput(
         timed_tasks=timed,
@@ -230,7 +237,15 @@ async def evening_summary(bot) -> None:
         prayer_section = await _build_prayer_status_section(session)
         quran_lines = [quran_service.build_deficit_message(quran_summary)]
         health_lines = await _build_health_status_section(session)
-        google_tomorrow_lines = await _build_google_tomorrow_section(Session)
+        tomorrow_date = datetime.now(APP_TZ).date() + timedelta(days=1)
+        tomorrow_prayer_times = await PrayerTimesService(session).get_cached_prayer_times(
+            tomorrow_date
+        )
+        google_tomorrow_lines = await _build_google_tomorrow_section(
+            Session,
+            local_tasks=tomorrow_tasks,
+            prayer_times=tomorrow_prayer_times,
+        )
 
         followup_keyboard = None
         if not quran_summary.goal_reached and cfg.allowed_telegram_id:
@@ -1010,7 +1025,12 @@ async def _build_health_status_section(session) -> list[str]:
     return lines
 
 
-async def _build_google_tomorrow_section(session_factory) -> list[str]:
+async def _build_google_tomorrow_section(
+    session_factory,
+    *,
+    local_tasks=None,
+    prayer_times=None,
+) -> list[str]:
     tomorrow = datetime.now(APP_TZ).date() + timedelta(days=1)
     day_start = datetime.combine(tomorrow, time.min, tzinfo=APP_TZ)
     day_end = day_start + timedelta(days=1)
@@ -1032,10 +1052,23 @@ async def _build_google_tomorrow_section(session_factory) -> list[str]:
     lines = [_format_google_tomorrow_event(event) for event in events[:5]]
     if len(events) > 5:
         lines.append(f"• ещё: {len(events) - 5}")
+    conflicts = detect_google_conflicts(
+        events=events,
+        local_tasks=local_tasks or [],
+        day=tomorrow,
+        prayer_times=prayer_times,
+    )
+    if conflicts:
+        lines.append(f"• Google conflicts: {len(conflicts)}. Review tomorrow.")
     return lines
 
 
-async def _build_google_today_section(session_factory) -> list[str]:
+async def _build_google_today_section(
+    session_factory,
+    *,
+    local_tasks=None,
+    prayer_times=None,
+) -> list[str]:
     today = datetime.now(APP_TZ).date()
     day_start = datetime.combine(today, time.min, tzinfo=APP_TZ)
     day_end = day_start + timedelta(days=1)
@@ -1057,6 +1090,14 @@ async def _build_google_today_section(session_factory) -> list[str]:
     lines = [_format_google_today_event(event) for event in events[:5]]
     if len(events) > 5:
         lines.append(f"• ещё: {len(events) - 5}")
+    conflicts = detect_google_conflicts(
+        events=events,
+        local_tasks=local_tasks or [],
+        day=today,
+        prayer_times=prayer_times,
+    )
+    if conflicts:
+        lines.append(f"• Google conflicts: {len(conflicts)}. /gcal_conflicts")
     return lines
 
 
