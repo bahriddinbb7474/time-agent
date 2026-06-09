@@ -138,6 +138,10 @@ def _format_edit_result_message(result) -> str:
     return result.user_message
 
 
+def _format_focus_task(task) -> str:
+    return f"Фокус: #{task.id} — {task.title}\nСейчас делай это."
+
+
 @router.message(Command("edit"))
 async def edit_cmd(
     message: Message,
@@ -213,6 +217,18 @@ async def done_cmd(message: Message, session: AsyncSession):
         return
 
     await message.answer(f"Готово: #{task.id}")
+
+
+@router.message(Command("focus"))
+async def focus_cmd(message: Message, session: AsyncSession):
+    tasks = await TaskService(session).list_active_focus_candidates()
+    focus_task = CrisisStackService.select_focus_task(tasks)
+
+    if focus_task is None:
+        await message.answer("Фокус пуст.")
+        return
+
+    await message.answer(_format_focus_task(focus_task))
 
 
 @router.message(Command("later"))
