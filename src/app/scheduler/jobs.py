@@ -12,6 +12,7 @@ from app.db.models import AlertQueue
 from app.services.boss_priority_service import BossPriorityService
 from app.services.family_contact_service import FamilyContactService
 from app.services.daily_context_service import DailyContextService
+from app.services.daily_plan_service import DailyPlanService
 from app.services.evening_planning_service import (
     EveningPlanningInput,
     build_evening_planning_message,
@@ -96,6 +97,7 @@ async def _collect_morning_briefing_input(
     task_service = TaskService(session)
     timed, floating = await task_service.list_today()
     later_items = await task_service.list_later(limit=50)
+    daily_plan = await DailyPlanService(session).get_plan(datetime.now(APP_TZ).date())
 
     quran_service = QuranService(session)
     quran_summary = await quran_service.get_daily_summary()
@@ -113,6 +115,7 @@ async def _collect_morning_briefing_input(
     return MorningBriefingInput(
         timed_tasks=timed,
         floating_tasks=floating,
+        daily_plan_text=daily_plan.text if daily_plan else None,
         later_count=len(later_items),
         google_today_lines=google_today_lines,
         prayer_lines=await _build_prayer_status_section(session),

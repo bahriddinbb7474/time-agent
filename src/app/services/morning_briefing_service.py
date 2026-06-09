@@ -10,6 +10,7 @@ from app.services.crisis_stack_service import CrisisStackService
 class MorningBriefingInput:
     timed_tasks: Sequence = field(default_factory=list)
     floating_tasks: Sequence = field(default_factory=list)
+    daily_plan_text: str | None = None
     later_count: int = 0
     google_today_lines: Sequence[str] = field(default_factory=list)
     prayer_lines: Sequence[str] = field(default_factory=list)
@@ -21,6 +22,7 @@ def build_morning_briefing_message(data: MorningBriefingInput) -> str:
     active_tasks = list(data.timed_tasks) + list(data.floating_tasks)
     lines: list[str] = ["🕗 Утро. План на сегодня"]
 
+    _append_daily_plan_section(lines, data.daily_plan_text)
     _append_focus_section(lines, active_tasks)
     _append_task_section(
         lines,
@@ -38,6 +40,15 @@ def build_morning_briefing_message(data: MorningBriefingInput) -> str:
     _append_later_section(lines, data.later_count)
 
     return "\n".join(lines)
+
+
+def _append_daily_plan_section(lines: list[str], plan_text: str | None) -> None:
+    if not plan_text:
+        return
+
+    lines.append("")
+    lines.append("Saved plan")
+    lines.append(f"• {plan_text}")
 
 
 def _append_focus_section(lines: list[str], tasks: Sequence) -> None:

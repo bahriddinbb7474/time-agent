@@ -20,6 +20,7 @@ from app.scheduler.jobs import (
     _format_google_today_event,
 )
 from app.services.crisis_stack_service import CrisisStackService
+from app.services.daily_plan_service import DailyPlanService
 from app.services.morning_briefing_service import (
     MorningBriefingInput,
     build_morning_briefing_message,
@@ -103,6 +104,11 @@ async def main():
             )
             await session.commit()
 
+            await DailyPlanService(session).save_plan(
+                plan_date=now.date(),
+                text="Deep work first.",
+            )
+
             task_service = TaskService(session)
             timed, floating = await task_service.list_today()
             active_tasks = timed + floating
@@ -138,6 +144,7 @@ async def main():
                 MorningBriefingInput(
                     timed_tasks=timed,
                     floating_tasks=floating,
+                    daily_plan_text="Deep work first.",
                     later_count=len(later_items),
                     google_today_lines=[
                         "• 09:30 — Daily sync",
@@ -150,6 +157,8 @@ async def main():
             )
 
             assert "Утро. План на сегодня" in message
+            assert "Saved plan" in message
+            assert "Deep work first." in message
             assert "Фокус" in message
             assert "Сегодня" in message
             assert "Prepare standup" in message
@@ -163,6 +172,7 @@ async def main():
             collected = await _collect_morning_briefing_input(session)
             assert len(collected.timed_tasks) == 1
             assert len(collected.floating_tasks) == 1
+            assert collected.daily_plan_text == "Deep work first."
             assert collected.later_count == 1
             assert collected.prayer_lines
             assert collected.quran_lines
