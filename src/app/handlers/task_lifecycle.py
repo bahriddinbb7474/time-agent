@@ -160,6 +160,23 @@ def _format_crisis_stack(tasks) -> str:
     return "\n".join(lines)
 
 
+def _format_next_focus_line(task) -> str | None:
+    if task is None:
+        return None
+    return f"Следующий фокус: #{task.id} — {task.title}"
+
+
+async def _build_done_message(*, session: AsyncSession, task_id: int) -> str:
+    tasks = await TaskService(session).list_active_focus_candidates()
+    focus_task = CrisisStackService.select_focus_task(tasks)
+    next_focus_line = _format_next_focus_line(focus_task)
+
+    if next_focus_line is None:
+        return f"Готово: #{task_id}"
+
+    return f"Готово: #{task_id}\n{next_focus_line}"
+
+
 @router.message(Command("edit"))
 async def edit_cmd(
     message: Message,
@@ -234,7 +251,7 @@ async def done_cmd(message: Message, session: AsyncSession):
         await message.answer(f"Задача #{task_id} не найдена.")
         return
 
-    await message.answer(f"Готово: #{task.id}")
+    await message.answer(await _build_done_message(session=session, task_id=task.id))
 
 
 @router.message(Command("focus"))
@@ -320,6 +337,10 @@ async def task_done_callback(callback: CallbackQuery, session: AsyncSession):
         return
 
     await callback.answer(f"Готово: #{task.id}")
+    if callback.message is not None:
+        await callback.message.answer(
+            await _build_done_message(session=session, task_id=task.id)
+        )
 
 
 @router.message(Command("delete"))
