@@ -14,6 +14,10 @@ if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
 from app.core.time import now_tz
 from app.db.models import Base, Task
 from app.services.crisis_stack_service import CrisisStackService
+from app.services.evening_planning_service import (
+    EveningPlanningInput,
+    build_evening_planning_message,
+)
 from app.services.task_service import TaskService
 
 
@@ -117,6 +121,25 @@ async def main():
             assert focus_task is not None
             assert focus_task.title == "Срочно проверить договор"
             assert not CrisisStackService.is_crisis(timed + floating)
+
+            message = build_evening_planning_message(
+                EveningPlanningInput(
+                    unfinished_tasks=timed + floating,
+                    later_items=later_items,
+                    tomorrow_tasks=tomorrow_tasks,
+                    prayer_lines=["• Fajr: done"],
+                    quran_lines=["• Quran: review"],
+                    health_lines=["• Hydration: ok"],
+                )
+            )
+
+            assert "Вечерний план" in message
+            assert "Закрытые сегодня пока не отслеживаются." in message
+            assert "Finish report" in message
+            assert "Срочно проверить договор" in message
+            assert "Call supplier" in message
+            assert "Tomorrow planning call" in message
+            assert "Что главное завтра?" in message
 
         await engine.dispose()
 
