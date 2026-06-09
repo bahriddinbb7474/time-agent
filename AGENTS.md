@@ -73,33 +73,42 @@
 
 ## Python verification on this Windows laptop
 
-Primary Python for this project:
+For all Python verification in this project, use the project-local Codex helper:
 
-    .\.venv\Scripts\python.exe
+    powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 ...
 
-Confirmed working in this project:
+For `py_compile`:
 
-- Path: C:\Projects\Projects_1\time-agent\.venv\Scripts\python.exe
+    powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 -m py_compile <file>
+
+For `pytest`:
+
+    powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 -m pytest <test_path>
+
+Why:
+Inside Codex App, `.\.venv\Scripts\python.exe` can fail with launcher errors even though it works in normal Windows PowerShell.
+The project-local helper calls the stable Python 3.11 executable and adds project paths:
+
+    C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe
+    src
+    .venv\Lib\site-packages
+
+Confirmed dependency check through the helper path:
+
 - SQLAlchemy: 2.0.43
 - greenlet: OK
 
-Use this interpreter for all Python checks:
-
-    .\.venv\Scripts\python.exe -m py_compile <file>
-    .\.venv\Scripts\python.exe -m pytest <test_path>
-
 Do not use bundled Codex Python for project tests when project dependencies are required.
+Do not try random Python candidates.
 
-Do not use external AppData Python as primary runtime:
+In normal Windows PowerShell, the project venv remains valid:
 
-    C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe
+    C:\Projects\Projects_1\time-agent\.venv\Scripts\python.exe
 
-Reason:
-Codex Windows sandbox may block external Python paths with Access denied.
-The project-local .venv is the correct runtime for this repository.
+But inside Codex App, always use `scripts\codex_python.ps1` for verification.
 
-If .venv is missing or broken, stop and report:
-"Project .venv is missing/broken; ask owner to recreate it."
+If Codex App asks approval for `scripts\codex_python.ps1`, request approval and continue.
+If the helper fails, stop and report clearly.
 
 Do not install packages.
 Do not recreate venv.
