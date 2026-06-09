@@ -5,6 +5,10 @@ from datetime import datetime, timedelta
 
 from app.core.time import APP_TZ
 from app.integrations.google.dto import GoogleEventDTO
+from app.services.google_event_formatter import (
+    format_google_event_line,
+    format_google_event_lines,
+)
 
 
 @dataclass(slots=True)
@@ -30,19 +34,6 @@ async def _maybe_write_when_enabled(*, writes_enabled: bool, service: FakeWriteS
     await service.create_event()
     await service.update_event()
     await service.delete_event()
-
-
-def _safe_line(event: GoogleEventDTO) -> str | None:
-    if event.status == "cancelled":
-        return None
-
-    if event.all_day:
-        return f"• весь день — {event.summary}"
-
-    if event.start_at is None:
-        return f"• {event.summary}"
-
-    return f"• {event.start_at.astimezone(APP_TZ).strftime('%H:%M')} — {event.summary}"
 
 
 async def main():
@@ -92,7 +83,11 @@ async def main():
         source_marker=None,
     )
 
-    lines = [line for line in (_safe_line(timed), _safe_line(all_day), _safe_line(cancelled)) if line]
+    assert format_google_event_line(timed) == "• 09:30 — Daily sync"
+    assert format_google_event_line(all_day) == "• весь день — Conference day"
+    assert format_google_event_line(cancelled) is None
+
+    lines = format_google_event_lines([timed, all_day, cancelled])
 
     assert lines == [
         "• 09:30 — Daily sync",
