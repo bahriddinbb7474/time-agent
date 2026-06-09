@@ -11,7 +11,8 @@
 - Stage 12 Morning Briefing Upgrade: done.
 - Stage 13 Google Calendar Read-First Sync: done.
 - Stage 14 DailyPlan / completed_at lifecycle: done in code and temp-DB tests; production DB migration not run.
-- Next stage: Family/Relationship Layer or remaining lifecycle semantics, depending on owner priority.
+- Stage 15 Voice Capture / AI Advisor Foundation: done.
+- Next stage: Family/Relationship Layer, remaining lifecycle semantics, or real provider integration after owner approval.
 
 ## 1. Stabilization Gate
 
@@ -34,9 +35,11 @@
 - Completed: `/later <text>` saves local-only inbox items.
 - Completed: `/backlog` shows Later Inbox items oldest first.
 - Completed: `/boss <text>` creates a fast floating work task.
+- Completed: plain free text creates an in-memory pending draft and asks for confirmation before saving.
+- Completed: confirmed capture can save as normal task, Later Inbox item, or Boss task through existing services.
 - Completed: evening summary shows a short Later Inbox section.
 - Completed: `/add` today/tomorrow parser literals were cleaned up.
-- Remaining: richer inbox review buttons, promotion from Later to scheduled task, and owner approval workflow.
+- Remaining: persistent capture drafts, richer inbox review buttons, promotion from Later to scheduled task, and richer owner approval workflow.
 
 ## 4. Prayer Protected Scheduling
 
@@ -122,8 +125,10 @@
 
 ## 12. Voice Capture v1.1
 
-- Add voice-to-text capture after v1 core is stable.
-- Route voice captures into Later Inbox first.
+- Completed foundation: voice messages are accepted safely and reply that transcription is disabled.
+- Completed foundation: disabled STT provider interface exists.
+- Completed foundation: disabled AI Advisor provider interface exists.
+- Remaining: real STT provider, real AI Advisor provider, explicit owner-approved provider secrets/config, transcription review, and routing transcribed voice captures into confirmation flow.
 
 ## 13. Optional Web UI v2
 

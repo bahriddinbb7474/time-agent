@@ -12,6 +12,11 @@
 - `src/app/db/test_morning_briefing.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_daily_plan_lifecycle.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_daily_plan_migration.py` is a temp SQLite migration smoke test.
+- `src/app/db/test_capture_classification.py` is a pure capture classification smoke test.
+- `src/app/db/test_capture_confirmation.py` is a pure capture confirmation helper smoke test.
+- `src/app/db/test_capture_actions.py` is a manual async smoke test using an isolated temporary SQLite DB.
+- `src/app/db/test_stt_provider.py` is a disabled STT provider smoke test.
+- `src/app/db/test_ai_advisor_provider.py` is a disabled AI Advisor provider smoke test.
 - Handler names `test_brief_cmd` and `test_evening_cmd` are Telegram command handlers, not tests.
 
 ## Tests Run
@@ -87,6 +92,18 @@ powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/tes
 ```
 
 This applies the Stage 14 SQL migration to a temporary SQLite DB only and verifies `tasks.completed_at`, `daily_plans`, and `schema_migrations`.
+
+Safe capture foundation smoke commands:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/test_capture_classification.py
+powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/test_capture_confirmation.py
+powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/test_capture_actions.py
+powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/test_stt_provider.py
+powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/test_ai_advisor_provider.py
+```
+
+These verify rule-based capture classification, confirmation helper callback data, confirmed capture actions against a temporary SQLite DB, disabled STT behavior, and disabled AI Advisor behavior.
 
 Python note: the documented Python path requires existing `.venv\Lib\site-packages` on `PYTHONPATH` for project dependencies in this environment. `.venv\Scripts\python.exe` exists but its launcher is broken.
 
@@ -188,6 +205,18 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Production `data/app.db` migration was not run.
 - No AI planning, automatic task moving, Google Calendar behavior changes, real bot startup, or production DB writes were added.
 
+## Stage 15 Voice Capture / AI Advisor Foundation Verification
+
+- Capture classification smoke test passed with pure logic and no DB writes.
+- Capture confirmation helper smoke test passed with short callback data.
+- Capture actions smoke test passed against an isolated temporary SQLite DB.
+- Plain free text creates only an in-memory pending draft until callback confirmation.
+- Confirmed capture can save as normal task, Later Inbox item, or Boss task through existing services.
+- Voice handler skeleton was verified by `py_compile`; it does not download/store voice files.
+- Disabled STT provider smoke test passed with no external call.
+- Disabled AI Advisor provider smoke test passed with no external call.
+- No real STT provider, AI provider, bot startup, migrations, schema changes, Google Calendar behavior changes, autonomous decisions, or production DB writes were added.
+
 ## Stage 6 Closeout Verification
 
 - Root info docs exist.
@@ -212,6 +241,10 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Handler/job-level tests for rendered evening summary delivery.
 - Handler/job-level tests for rendered morning briefing delivery.
 - Handler-level tests for `/plan_tomorrow`.
+- Handler-level tests for free-text capture and capture confirmation callbacks with aiogram test doubles.
+- Handler-level tests for voice capture skeleton.
+- Tests for real STT provider integration after provider choice.
+- Tests for real AI Advisor provider integration after provider choice.
 - Production migration rehearsal on a copied real DB before owner-approved deployment.
 - Tests for promoting Later Inbox items into scheduled tasks.
 - Tests for boss alert cleanup when a boss task is marked done.

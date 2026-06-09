@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 14 DailyPlan / completed_at lifecycle is complete in code and temp-DB tests. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, prayer protected scheduling hardening, `/focus`, `/crisis`, the 21:00 evening planning summary, the 08:30 morning ready-plan briefing, Google Calendar read-first safeguards, `Task.completed_at`, minimal `DailyPlan`, and `/plan_tomorrow` are now in place.
+Stage 15 Voice Capture / AI Advisor Foundation is complete in code and safe tests. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, prayer protected scheduling hardening, `/focus`, `/crisis`, the 21:00 evening planning summary, the 08:30 morning ready-plan briefing, Google Calendar read-first safeguards, `Task.completed_at`, minimal `DailyPlan`, `/plan_tomorrow`, free-text capture confirmation, voice skeleton, disabled STT provider, and disabled AI Advisor provider are now in place.
 
 ## Working Features Visible in Code
 
@@ -12,6 +12,10 @@ Stage 14 DailyPlan / completed_at lifecycle is complete in code and temp-DB test
 - Default protected slots and routines seeding.
 - Task creation, editing, deletion, local done marking with `completed_at`, Later Inbox capture, boss capture, and daily active listing.
 - Minimal `DailyPlan` storage and `/plan_tomorrow <text>` manual save/upsert for tomorrow.
+- Free-text Telegram capture is accepted without a command, stored as an in-memory pending draft, and requires owner confirmation before creating anything.
+- Capture confirmation can save as a normal task, Later Inbox item, or Boss task using existing services.
+- Voice messages are accepted safely, but transcription is disabled and no voice file is downloaded.
+- STT and AI Advisor provider interfaces exist with disabled implementations only.
 - Deterministic focus/crisis selection for active `todo` tasks.
 - `/focus` suggests one next task; `/crisis` shows an urgent stack when 2+ urgent active tasks exist.
 - `/today` shows a short focus/crisis hint when useful.
@@ -41,6 +45,7 @@ Stage 14 DailyPlan / completed_at lifecycle is complete in code and temp-DB test
 - Safe evening planning smoke test uses an isolated temporary SQLite DB.
 - Safe morning briefing smoke test uses an isolated temporary SQLite DB.
 - Safe DailyPlan/completed_at lifecycle and migration smoke tests use isolated temporary SQLite DBs.
+- Safe capture classification, confirmation, action, STT, and AI Advisor smoke tests use pure logic or isolated temporary SQLite DBs.
 
 ## Broken or Incomplete Parts
 
@@ -59,6 +64,10 @@ Stage 14 DailyPlan / completed_at lifecycle is complete in code and temp-DB test
 - Morning briefing consumes DailyPlan for today only when one exists.
 - Owner still creates tomorrow tasks manually with `/add`, `/later`, or `/boss`.
 - Morning briefing has no AI planning and does not move/reschedule tasks.
+- Pending free-text capture drafts are in-memory and disappear on restart.
+- Voice transcription is disabled; no real STT provider is configured or called.
+- AI Advisor is disabled; no real AI provider is configured or called.
+- Free-text capture does not create tasks without confirmation.
 - Morning Google Calendar context is read-only and degrades quietly when unavailable.
 - Later Inbox appears in morning only as a gentle count.
 - Boss alert suppression during prayer is intentionally unresolved and not implemented.

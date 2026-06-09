@@ -19,11 +19,16 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Stage 12 Morning Briefing Upgrade is complete.
 - Stage 13 Google Calendar Read-First Sync is complete.
 - Stage 14 DailyPlan / completed_at lifecycle is complete in code and temp-DB tests; production DB migration has not been run.
+- Stage 15 Voice Capture / AI Advisor Foundation is complete; real STT/AI providers are still disabled.
 
 ## What Works in Code
 
 - Owner-only Telegram access.
 - `/start`, `/rules`, `/today`, `/add`, `/edit`, `/delete`, `/done`, `/later`, `/backlog`, `/boss`, `/focus`, `/crisis`, `/plan_tomorrow`.
+- Plain free-text Telegram messages create an in-memory pending capture draft and ask for confirmation before saving.
+- Capture confirmations can save as a normal task, Later Inbox item, or Boss task through existing services.
+- Voice messages are accepted safely, but transcription is disabled.
+- Disabled STT and AI Advisor provider interfaces exist; no real provider calls are made.
 - Minimal `✅ Сделал` button from `/today` marks tasks done through `task_done:<id>`.
 - Later Inbox uses existing `tasks` rows with `status="later"` and is shown in evening summary.
 - `/health` owner-only runtime status command.
@@ -53,7 +58,10 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - A Stage 14 schema migration exists in `migrations/versions/`, but no runner exists and it has not been applied to production `data/app.db`.
 - Google Calendar service methods remain write-capable, but task sync write paths are gated by `ENABLE_GOOGLE_WRITES=false` by default.
 - Marking tasks done is local-only; Google Calendar lifecycle behavior for done/cancelled/later is not implemented.
-- Later Inbox is local-only; no AI/STT/voice capture is implemented.
+- Later Inbox is local-only; free-text capture can save into it after confirmation.
+- Pending capture drafts are in-memory and disappear on restart.
+- Voice transcription is disabled; no real STT provider or file download is implemented.
+- AI Advisor is disabled; no real AI provider, autonomous decision, or AI planning is implemented.
 - Boss alert cleanup on task done is still a follow-up.
 - Persistent crisis stack DB flow is not implemented yet.
 - Focus/crisis mode is deterministic only: no AI planning and no autonomous rescheduling.
@@ -68,4 +76,4 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 
 ## Next Priority
 
-Next priority depends on owner choice: apply the Stage 14 DB migration to production only after backup and explicit approval, then continue Family/Relationship Layer or remaining lifecycle work. Track: reopen flow, promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, and richer Google conflict actions.
+Next priority depends on owner choice: apply the Stage 14 DB migration to production only after backup and explicit approval, then continue Family/Relationship Layer, remaining lifecycle work, or owner-approved real STT/AI provider integration. Track: persistent capture drafts, reopen flow, promote Later items, later/postpone/cancel semantics, richer buttons, persistent crisis stack flow, boss alert cleanup on done, boss prayer suppression decision, and richer Google conflict actions.
