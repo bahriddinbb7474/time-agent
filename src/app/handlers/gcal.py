@@ -14,9 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import load_config
 from app.core.time import APP_TZ
+from app.services.google_conflict_detector import (
+    detect_google_conflicts,
+    format_google_conflict_lines,
+)
 from app.services.google_calendar_service import GoogleCalendarService
 from app.services.google_event_formatter import format_google_event_lines
 from app.services.google_reconciliation_service import GoogleReconciliationService
+from app.services.prayer_times_service import PrayerTimesService
+from app.services.task_service import TaskService
 
 
 def _build_google_conflict_keyboard(task_id: int) -> InlineKeyboardMarkup:
@@ -126,6 +132,43 @@ def build_gcal_router(gcal_service: GoogleCalendarService) -> Router:
                 [
                     "Google Calendar tomorrow:\n",
                     *event_lines,
+                ]
+            )
+        )
+
+    @router.message(Command("gcal_conflicts"))
+    async def gcal_conflicts(message: Message, session: AsyncSession):
+        today = datetime.now(APP_TZ).date()
+        time_min = datetime.combine(today, time.min, tzinfo=APP_TZ)
+        time_max = datetime.combine(today, time.max, tzinfo=APP_TZ)
+
+        try:
+            events = await gcal_service.list_events(time_min=time_min, time_max=time_max)
+        except Exception as e:
+            e = "unavailable"
+            await message.answer(f"Google Calendar unavailable: {e}")
+            return
+
+        timed_tasks, _floating_tasks = await TaskService(session).list_today()
+        prayer_times = await PrayerTimesService(session).get_cached_prayer_times(today)
+        conflicts = detect_google_conflicts(
+            events=events,
+            local_tasks=timed_tasks,
+            day=today,
+            prayer_times=prayer_times,
+        )
+
+        if not conflicts:
+            await message.answer("Google conflicts: none.")
+            return
+
+        lines = format_google_conflict_lines(conflicts)
+        await message.answer(
+            "\n".join(
+                [
+                    f"Google conflicts: {len(conflicts)}",
+                    *lines,
+                    "Owner action required. No changes made.",
                 ]
             )
         )
