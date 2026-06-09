@@ -11,6 +11,7 @@ class Config:
     allowed_telegram_id: int | None
     tz: str
     enable_debug_commands: bool
+    enable_google_writes: bool
 
 
 def load_config() -> Config:
@@ -26,10 +27,15 @@ def load_config() -> Config:
         os.getenv("ENABLE_DEBUG_COMMANDS", "false").strip().lower()
         in {"1", "true", "yes", "on"}
     )
+    enable_google_writes = (
+        os.getenv("ENABLE_GOOGLE_WRITES", "false").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
 
     return Config(
         bot_token=token,
         allowed_telegram_id=allowed_id,
         tz=tz,
         enable_debug_commands=enable_debug_commands,
+        enable_google_writes=enable_google_writes,
     )

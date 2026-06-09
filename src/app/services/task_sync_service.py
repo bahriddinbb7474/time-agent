@@ -6,6 +6,7 @@ from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import load_config
 from app.db import crud
 from app.db.task_external_link_repo import TaskExternalLinkRepo
 from app.scheduler.jobs import _schedule_same_alert
@@ -79,6 +80,7 @@ class TaskSyncService:
         self.rules_service = RulesService(session)
         self.link_repo = TaskExternalLinkRepo(session)
         self.policy_service = TaskSyncPolicyService()
+        self.google_writes_enabled = load_config().enable_google_writes
 
     async def create_task_with_google_sync(
         self,
@@ -217,6 +219,31 @@ class TaskSyncService:
                 local_created=True,
                 google_sync_success=True,
                 google_sync_status="synced",
+                conflict_names=[],
+                error_message=None,
+                user_message=message,
+                validation_result=validation_result,
+            )
+
+        if not self.google_writes_enabled:
+            await self.link_repo.create_skipped(
+                task_id=task.id,
+                provider=provider,
+                skip_reason="google_writes_disabled",
+            )
+            message = (
+                f"✅ Added locally: #{task.id} {task.title} — {task.planned_at}, "
+                f"{task.duration_min} min.\n"
+                "Google Calendar writes are disabled."
+            )
+            if boss_alert_message:
+                message = f"{message}\n{boss_alert_message}"
+
+            return CreateTaskWithSyncResultDTO(
+                task=task,
+                local_created=True,
+                google_sync_success=False,
+                google_sync_status="google_writes_disabled",
                 conflict_names=[],
                 error_message=None,
                 user_message=message,
@@ -392,6 +419,43 @@ class TaskSyncService:
         )
 
         link = await self.link_repo.get_by_task_and_provider(task_id, provider)
+
+        if not self.google_writes_enabled and self._update_would_write_google(
+            planned_at=planned_at,
+            old_sync_allowed=old_policy.sync_allowed,
+            new_sync_allowed=new_policy.sync_allowed,
+            has_synced_link=bool(link and link.external_id),
+        ):
+            if planned_at is not None and new_policy.sync_allowed and link is None:
+                await self.link_repo.create_skipped(
+                    task_id=updated_task.id,
+                    provider=provider,
+                    skip_reason="google_writes_disabled",
+                )
+
+            time_text = (
+                "without time"
+                if updated_task.planned_at is None
+                else str(updated_task.planned_at)
+            )
+            message = (
+                f"✅ Updated locally: #{updated_task.id} {updated_task.title} — "
+                f"{time_text}, {updated_task.duration_min} min.\n"
+                "Google Calendar writes are disabled."
+            )
+            if boss_alert_message:
+                message = f"{message}\n{boss_alert_message}"
+
+            return UpdateTaskWithSyncResultDTO(
+                task=updated_task,
+                local_updated=True,
+                google_sync_success=False,
+                google_sync_status="google_writes_disabled",
+                conflict_names=[],
+                error_message=None,
+                user_message=message,
+                validation_result=validation_result,
+            )
 
         if planned_at is None:
             if link and link.external_id and old_policy.sync_allowed:
@@ -809,6 +873,36 @@ class TaskSyncService:
         link = await self.link_repo.get_by_task_and_provider(task_id, provider)
 
         if (
+            not self.google_writes_enabled
+            and policy.sync_allowed
+            and link is not None
+            and link.external_id
+            and link.sync_status not in {"skipped_by_policy", "deleted_external"}
+        ):
+            deleted = await self.task_service.delete_task(task_id)
+            if not deleted:
+                return DeleteTaskWithSyncResultDTO(
+                    task_id=task_id,
+                    local_deleted=False,
+                    google_sync_success=False,
+                    google_sync_status="google_writes_disabled",
+                    error_message="Local delete failed",
+                    user_message=f"❌ Could not delete task #{task_id} locally.",
+                )
+
+            return DeleteTaskWithSyncResultDTO(
+                task_id=task_id,
+                local_deleted=True,
+                google_sync_success=False,
+                google_sync_status="google_writes_disabled",
+                error_message=None,
+                user_message=(
+                    f"✅ Task #{task_id} deleted locally. "
+                    "Google Calendar writes are disabled."
+                ),
+            )
+
+        if (
             not policy.sync_allowed
             or link is None
             or not link.external_id
@@ -1046,6 +1140,20 @@ class TaskSyncService:
             self.scheduler.remove_job(job_id)
         except Exception:
             pass
+
+    @staticmethod
+    def _update_would_write_google(
+        *,
+        planned_at: datetime | None,
+        old_sync_allowed: bool,
+        new_sync_allowed: bool,
+        has_synced_link: bool,
+    ) -> bool:
+        if planned_at is None:
+            return old_sync_allowed and has_synced_link
+        if old_sync_allowed and has_synced_link:
+            return True
+        return new_sync_allowed
 
     @staticmethod
     def _resolve_priority_code(title: str) -> str | None:

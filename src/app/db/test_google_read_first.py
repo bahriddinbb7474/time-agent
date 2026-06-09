@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.db.models import Base
 from app.core.time import APP_TZ
 from app.integrations.google.dto import GoogleEventDTO
+from app.services.task_sync_service import TaskSyncService
 from app.services.google_event_formatter import (
     format_google_event_line,
     format_google_event_lines,
@@ -37,6 +44,9 @@ async def _maybe_write_when_enabled(*, writes_enabled: bool, service: FakeWriteS
 
 
 async def main():
+    os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
+    os.environ["ENABLE_GOOGLE_WRITES"] = "false"
+
     start_at = datetime(2026, 6, 9, 9, 30, tzinfo=APP_TZ)
     end_at = start_at + timedelta(minutes=30)
 
@@ -103,6 +113,36 @@ async def main():
     assert fake_service.create_calls == 0
     assert fake_service.update_calls == 0
     assert fake_service.delete_calls == 0
+
+    with tempfile.TemporaryDirectory(prefix="time_agent_google_test_") as tmp_dir:
+        db_path = Path(tmp_dir) / "google_read_first.db"
+        engine = create_async_engine(
+            f"sqlite+aiosqlite:///{db_path.as_posix()}",
+            echo=False,
+            future=True,
+        )
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        async with Session() as session:
+            service = TaskSyncService(session=session, gcal_service=fake_service)
+            result = await service.create_task_with_google_sync(
+                title="Work sync test",
+                planned_at=start_at,
+                duration_min=30,
+                category="work",
+                skip_context_validation=True,
+            )
+
+            assert result.local_created is True
+            assert result.google_sync_status == "google_writes_disabled"
+            assert fake_service.create_calls == 0
+            assert fake_service.update_calls == 0
+            assert fake_service.delete_calls == 0
+
+        await engine.dispose()
 
     print("PASS: Google read-first smoke test uses fake data only")
 
