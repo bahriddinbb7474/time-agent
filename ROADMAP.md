@@ -5,7 +5,8 @@
 - Stage 6 Stabilization Gate: done.
 - Stage 7 local done/button slice: done.
 - Stage 8 Capture Mode + Later Inbox: done.
-- Next stage: Prayer Protected Scheduling hardening or Evening Planning Engine, with remaining lifecycle semantics tracked separately.
+- Stage 9 Prayer Protected Scheduling hardening: done.
+- Next stage: Evening Planning Engine or Focus/Crisis Mode, with remaining lifecycle semantics tracked separately.
 
 ## 1. Stabilization Gate
 
@@ -33,9 +34,14 @@
 
 ## 4. Prayer Protected Scheduling
 
-- Harden prayer protected windows and Dhuhr special case.
-- Ensure prayer completion affects later scheduling.
-- Add tests for Hanafi Tashkent timings, protected buffers, and stale alert recovery.
+- Completed: pure prayer protected-window helper with Hanafi/Tashkent constants.
+- Completed: ContextValidator uses cached prayer times for read-only validation when cache exists.
+- Completed: prayer conflict tests for protected windows, Dhuhr dead zone, safe-slot suggestion, and completed-prayer skip.
+- Completed: `/add` and `/edit` prayer conflict UX hardened to avoid silent scheduling.
+- Completed: Quran follow-up and hydration quieting during cached prayer protected windows.
+- Completed: prayer reminder wording now says to prepare before prayer.
+- Completed: prayer alert idempotency/stale smoke coverage.
+- Remaining: boss alert prayer suppression decision, DB-backed prayer window settings later, and Google Calendar imported-event prayer conflict review.
 
 ## 5. Focus/Crisis Mode
 

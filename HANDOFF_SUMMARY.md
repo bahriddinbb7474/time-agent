@@ -13,6 +13,7 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Stage 6 Stabilization Gate is complete.
 - Stage 7 local done/button slice is complete.
 - Stage 8 Capture Mode + Later Inbox is complete.
+- Stage 9 Prayer Protected Scheduling hardening is complete.
 
 ## What Works in Code
 
@@ -24,6 +25,9 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Google Calendar OAuth, read today, debug, pull/reconcile, create/update/delete for allowed task categories.
 - Prayer times fetch/cache and prayer reminder alerts.
 - Context validation for sleep, second sleep, prayer, protected slots, and Siyam heavy-load warnings.
+- Prayer protected scheduling uses Hanafi `school=1`, `Asia/Tashkent`, 15-minute pre-prayer and 20-minute post-prayer windows, plus Dhuhr `13:00-13:20`.
+- `/add` and `/edit` warn on prayer conflicts and suggest safe slots without silent scheduling.
+- Quran follow-up and hydration notifications are quieted during cached prayer protected windows.
 - Morning briefing and evening summary jobs.
 - Quran progress and follow-up reminders.
 - Basic family contact candidate generation.
@@ -39,8 +43,11 @@ Time-Agent is a Telegram-first personal time and task assistant. It manages loca
 - Marking tasks done is local-only; Google Calendar lifecycle behavior for done/cancelled/later is not implemented.
 - Later Inbox is local-only; no AI/STT/voice capture is implemented.
 - Boss alert cleanup on task done is still a follow-up.
+- Boss alert suppression during prayer is unresolved and not implemented.
+- Google Calendar imported-event prayer conflict review remains future work.
+- Prayer window settings are code-level constants, not DB-backed settings.
 - Crisis mode references `Task.user_id`, but the current `Task` model has no `user_id` column, so that path is effectively skipped.
 
 ## Next Priority
 
-Prayer Protected Scheduling hardening or Evening Planning Engine, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, boss alert cleanup on done, and Google Calendar lifecycle policy.
+Evening Planning Engine or Focus/Crisis Mode, while tracking remaining lifecycle work: promote Later items, later/postpone/cancel semantics, richer buttons, boss alert cleanup on done, boss prayer suppression decision, and Google Calendar lifecycle policy.

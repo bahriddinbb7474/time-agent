@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 8 Capture Mode + Later Inbox is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, and evening Later review are now in place.
+Stage 9 Prayer Protected Scheduling hardening is complete. The project remains pre-production, but root docs, env examples, safe test DB, migration foundation, debug gates, Docker/env audit, `/health`, local task done status, `/done`, active `/today` filtering, a minimal Telegram done button, Later Inbox, `/later`, `/backlog`, `/boss`, evening Later review, and prayer protected scheduling hardening are now in place.
 
 ## Working Features Visible in Code
 
@@ -12,6 +12,9 @@ Stage 8 Capture Mode + Later Inbox is complete. The project remains pre-producti
 - Default protected slots and routines seeding.
 - Task creation, editing, deletion, local done marking, Later Inbox capture, boss capture, and daily active listing.
 - Context validation for sleep, second sleep, prayer windows, protected slots, and Siyam heavy-load warnings.
+- Prayer protected windows use Hanafi `school=1`, `Asia/Tashkent`, 15 minutes before prayer, 20 minutes after prayer, and the Dhuhr `13:00-13:20` dead zone.
+- `/add` and `/edit` do not silently create/update tasks inside prayer conflicts; they warn and suggest a safe slot when available.
+- Quran follow-up alerts are postponed during cached prayer protected windows; hydration runtime pings are skipped during cached prayer protected windows.
 - Google Calendar OAuth, event reads, pull/reconcile, and category-limited write sync.
 - Persistent alert queue with recovery after restart.
 - Morning briefing at 08:30 and evening summary at 21:00 Asia/Tashkent.
@@ -25,6 +28,7 @@ Stage 8 Capture Mode + Later Inbox is complete. The project remains pre-producti
 - Safe OAuth state smoke test uses an isolated temporary SQLite DB.
 - Safe task status smoke test uses an isolated temporary SQLite DB.
 - Safe Later Inbox smoke test uses an isolated temporary SQLite DB.
+- Safe prayer validation/recovery smoke test uses an isolated temporary SQLite DB.
 
 ## Broken or Incomplete Parts
 
@@ -38,6 +42,9 @@ Stage 8 Capture Mode + Later Inbox is complete. The project remains pre-producti
 - Local task `done` and Later Inbox `status="later"` capture are implemented; `moved`, `skipped`, `postponed`, and `cancelled` task lifecycle semantics are not implemented yet.
 - Marking a task done is local-only and does not update/delete Google Calendar events.
 - Later Inbox appears in evening summary, but full evening/morning planning engines and owner approval workflow are not complete.
+- Boss alert suppression during prayer is intentionally unresolved and not implemented.
+- DB-backed prayer window settings are not implemented; Stage 9 uses code-level constants.
+- Google Calendar prayer conflict review for imported external events remains future work.
 - `/focus` is not visible as a complete command surface.
 
 ## Production Readiness

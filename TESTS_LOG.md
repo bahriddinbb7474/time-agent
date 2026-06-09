@@ -6,6 +6,7 @@
 - `src/app/db/test_oauth_state_repo.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_task_status.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - `src/app/db/test_later_inbox.py` is a manual async smoke test using an isolated temporary SQLite DB.
+- `src/app/db/test_prayer_validation.py` is a manual async smoke test using an isolated temporary SQLite DB.
 - Handler names `test_brief_cmd` and `test_evening_cmd` are Telegram command handlers, not tests.
 
 ## Tests Run
@@ -33,6 +34,14 @@ $env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages";
 ```
 
 This verifies `status="later"` storage, `list_later()`, exclusion from active `/today`, and `/add` today/tomorrow parser literals against a temporary SQLite DB only.
+
+Safe prayer validation/recovery smoke command:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE="1"; $env:PYTHONPATH="src;.venv\Lib\site-packages"; & "C:\Users\USER\AppData\Local\Programs\Python\Python311\python.exe" src/app/db/test_prayer_validation.py
+```
+
+This verifies Hanafi/Tashkent constants, prayer protected-window conflicts, Dhuhr dead zone, safe-slot suggestion, completed-prayer skip, cached read-only validation, prayer quieting, no duplicate prayer alerts, and stale prayer alert detection against a temporary SQLite DB only.
 
 Python note: the documented Python path requires existing `.venv\Lib\site-packages` on `PYTHONPATH` for project dependencies in this environment. `.venv\Scripts\python.exe` exists but its launcher is broken.
 
@@ -69,6 +78,16 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - `/add` today/tomorrow parser literal cleanup was covered by parser smoke in `src/app/db/test_later_inbox.py`.
 - Bot was not started.
 
+## Stage 9 Prayer Protected Scheduling Verification
+
+- Prayer validation and alert recovery passed isolated temp SQLite smoke test.
+- Protected windows keep Hanafi `school=1`, `Asia/Tashkent`, 15 minutes before prayer, and 20 minutes after prayer.
+- Dhuhr dead zone remains `13:00-13:20` with suggested shift to `13:25`.
+- Cached prayer validation avoids forced Aladhan refresh/write when prayer cache already exists.
+- Quran follow-up quieting and hydration quieting use cached prayer times only.
+- Boss alerts are not suppressed during prayer; this remains an owner decision.
+- Bot was not started.
+
 ## Stage 6 Closeout Verification
 
 - Root info docs exist.
@@ -91,10 +110,10 @@ Safe inspection only. Bot was not started, migrations were not run, and `data/ap
 - Handler-level tests for `/later`, `/backlog`, and `/boss`.
 - Tests for promoting Later Inbox items into scheduled tasks.
 - Tests for boss alert cleanup when a boss task is marked done.
-- ContextValidator tests for sleep, second sleep, prayer, Dhuhr dead zone, protected slots, and Siyam warnings.
+- ContextValidator tests for sleep, second sleep, protected slots, and Siyam warnings.
 - Google sync policy tests by category.
 - Google reconciliation tests for imported, skipped, echo, and conflict events.
-- Alert queue recovery/idempotency tests.
+- Broader alert queue recovery/idempotency tests.
 - Prayer time cache tests with mocked Aladhan API.
 - Quran progress parse/backward-confirmation/daily-summary tests.
 - OwnerOnlyMiddleware tests.
