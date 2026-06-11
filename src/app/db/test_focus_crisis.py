@@ -118,6 +118,24 @@ async def main():
             assert urgent_count == 2
             assert CrisisStackService.is_crisis(floating)
             assert not CrisisStackService.is_crisis([floating[0]])
+            assert not hasattr(Task, "user_id")
+
+            task_service = TaskService(session)
+            assert await task_service._count_open_urgent_tasks(user_id=123456789) == 2
+
+            activated_user_ids = []
+            original_activate = CrisisStackService.activate_crisis_mode
+
+            def fake_activate(self, user_id: int) -> None:
+                activated_user_ids.append(user_id)
+
+            CrisisStackService.activate_crisis_mode = fake_activate
+            try:
+                await task_service._maybe_trigger_crisis_mode(user_id=123456789)
+            finally:
+                CrisisStackService.activate_crisis_mode = original_activate
+
+            assert activated_user_ids == [123456789]
 
             active_candidates = await TaskService(session).list_active_focus_candidates()
             active_titles = [task.title for task in active_candidates]

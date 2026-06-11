@@ -191,25 +191,10 @@ class TaskService:
         log.info("Crisis stack activated urgent_tasks=%s", urgent_tasks_count)
 
     async def _count_open_urgent_tasks(self, *, user_id: int) -> int:
-        stmt = (
-            select(Task)
-            .where(Task.status != "done")
-            .where(Task.status != "cancelled")
-        )
-
-        task_user_col = getattr(Task, "user_id", None)
-        if task_user_col is None:
-            log.warning(
-                "Crisis trigger skipped: user-scoped task filter is unavailable user_id=%s",
-                user_id,
-            )
-            return 0
-
-        stmt = stmt.where(task_user_col == user_id)
-
+        stmt = select(Task).where(Task.status == "todo")
         result = await self.session.execute(stmt)
         tasks = result.scalars().all()
-        return sum(1 for task in tasks if CrisisStackService.is_urgent_text(task.title))
+        return sum(1 for task in tasks if CrisisStackService.is_urgent_task(task))
 
     async def _resolve_context_status(
         self,
