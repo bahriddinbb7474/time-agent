@@ -11,6 +11,7 @@ def main():
         assert result.applied == [
             "20260101_0000_baseline_pre_stage14",
             "20260609_1300_add_daily_plan_lifecycle",
+            "20260612_0300_add_capture_drafts",
         ]
 
         import sqlite3

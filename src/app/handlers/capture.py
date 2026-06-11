@@ -8,28 +8,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.capture_confirmation_service import (
     CAPTURE_ACTION_BOSS,
     CAPTURE_ACTION_CANCEL,
+    CAPTURE_ACTION_EXPIRED_CANCEL,
+    CAPTURE_ACTION_EXPIRED_LATER,
     CAPTURE_ACTION_LATER,
     CAPTURE_ACTION_TASK,
     CAPTURE_CALLBACK_PREFIX,
     build_capture_button_specs,
     build_capture_confirmation_text,
+    build_expired_capture_button_specs,
+    build_expired_capture_text,
 )
 from app.services.capture_action_service import CaptureActionService
+from app.services.capture_draft_service import CaptureDraftService
 from app.services.capture_router_service import (
     CAPTURE_KIND_IGNORE,
-    CaptureDraft,
     CaptureRouterService,
 )
 from app.services.stt_provider import DisabledSTTProvider
 
 
 router = Router()
-
-PENDING_CAPTURE_DRAFTS: dict[tuple[int, int], CaptureDraft] = {}
-
-
-def build_capture_key(*, chat_id: int, user_id: int) -> tuple[int, int]:
-    return chat_id, user_id
 
 
 def build_capture_confirmation_keyboard() -> InlineKeyboardMarkup:
@@ -46,6 +44,20 @@ def build_capture_confirmation_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def build_expired_capture_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=button.text,
+                    callback_data=button.callback_data,
+                )
+            ]
+            for button in build_expired_capture_button_specs()
+        ]
+    )
+
+
 @router.message(F.voice)
 async def capture_voice_message(message: Message):
     result = await DisabledSTTProvider().transcribe_voice(
@@ -55,7 +67,7 @@ async def capture_voice_message(message: Message):
 
 
 @router.message(F.text)
-async def capture_text_message(message: Message):
+async def capture_text_message(message: Message, session: AsyncSession):
     if message.text is None or message.chat is None or message.from_user is None:
         return
 
@@ -63,11 +75,41 @@ async def capture_text_message(message: Message):
     if draft.kind == CAPTURE_KIND_IGNORE:
         return
 
-    key = build_capture_key(
+    draft_service = CaptureDraftService(session)
+    await draft_service.expire_old_pending_drafts(
         chat_id=message.chat.id,
         user_id=message.from_user.id,
     )
-    PENDING_CAPTURE_DRAFTS[key] = draft
+
+    expired_record = await draft_service.get_latest_expired_draft(
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    if expired_record is not None:
+        await message.answer(
+            build_expired_capture_text(draft_service.to_capture_draft(expired_record)),
+            reply_markup=build_expired_capture_keyboard(),
+        )
+        return
+
+    pending_record = await draft_service.get_latest_pending_draft(
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    if pending_record is not None:
+        await message.answer(
+            build_capture_confirmation_text(
+                draft_service.to_capture_draft(pending_record)
+            ),
+            reply_markup=build_capture_confirmation_keyboard(),
+        )
+        return
+
+    await draft_service.create_pending_draft(
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        draft=draft,
+    )
 
     await message.answer(
         build_capture_confirmation_text(draft),
@@ -86,22 +128,11 @@ async def capture_confirmation_callback(
         return
 
     action = (callback.data or "").removeprefix(f"{CAPTURE_CALLBACK_PREFIX}:")
-    key = build_capture_key(
+    draft_service = CaptureDraftService(session)
+    await draft_service.expire_old_pending_drafts(
         chat_id=callback.message.chat.id,
         user_id=callback.from_user.id,
     )
-    draft = PENDING_CAPTURE_DRAFTS.pop(key, None)
-
-    if action == CAPTURE_ACTION_CANCEL:
-        await _finalize_capture_ui(callback)
-        await callback.message.answer("Отменено.")
-        await callback.answer()
-        return
-
-    if draft is None:
-        await _finalize_capture_ui(callback)
-        await callback.answer("Черновик не найден.", show_alert=True)
-        return
 
     service = CaptureActionService(
         session,
@@ -109,8 +140,57 @@ async def capture_confirmation_callback(
         bot=callback.bot,
     )
 
+    if action in {CAPTURE_ACTION_EXPIRED_LATER, CAPTURE_ACTION_EXPIRED_CANCEL}:
+        expired_record = await draft_service.get_latest_expired_draft(
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+        )
+        if expired_record is None:
+            await _finalize_capture_ui(callback)
+            await callback.answer("Черновик не найден.", show_alert=True)
+            return
+
+        if action == CAPTURE_ACTION_EXPIRED_LATER:
+            task = await service.create_later_from_text(expired_record.raw_text)
+            await draft_service.mark_confirmed(expired_record)
+            await _finalize_capture_ui(callback)
+            await callback.message.answer(f"На потом: #{task.id}")
+            await callback.answer()
+            return
+
+        await draft_service.mark_cancelled(expired_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer("Отменено.")
+        await callback.answer()
+        return
+
+    pending_record = await draft_service.get_latest_pending_draft(
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+    )
+
+    if action == CAPTURE_ACTION_CANCEL:
+        if pending_record is not None:
+            await draft_service.mark_cancelled(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer("Отменено.")
+        await callback.answer()
+        return
+
+    if action not in {CAPTURE_ACTION_LATER, CAPTURE_ACTION_BOSS, CAPTURE_ACTION_TASK}:
+        await callback.answer("Неизвестное действие.", show_alert=True)
+        return
+
+    if pending_record is None:
+        await _finalize_capture_ui(callback)
+        await callback.answer("Черновик не найден.", show_alert=True)
+        return
+
+    draft = draft_service.to_capture_draft(pending_record)
+
     if action == CAPTURE_ACTION_LATER:
         task = await service.create_later_from_text(draft.text)
+        await draft_service.mark_confirmed(pending_record)
         await _finalize_capture_ui(callback)
         await callback.message.answer(f"На потом: #{task.id}")
         await callback.answer()
@@ -121,6 +201,7 @@ async def capture_confirmation_callback(
             draft.text,
             user_id=callback.from_user.id,
         )
+        await draft_service.mark_confirmed(pending_record)
         await _finalize_capture_ui(callback)
         await callback.message.answer(f"Boss задача: #{task.id}")
         await callback.answer()
@@ -131,13 +212,11 @@ async def capture_confirmation_callback(
             draft.text,
             user_id=callback.from_user.id,
         )
+        await draft_service.mark_confirmed(pending_record)
         await _finalize_capture_ui(callback)
         await callback.message.answer(result.user_message)
         await callback.answer()
         return
-
-    await _finalize_capture_ui(callback)
-    await callback.answer("Неизвестное действие.", show_alert=True)
 
 
 async def _finalize_capture_ui(callback: CallbackQuery) -> None:

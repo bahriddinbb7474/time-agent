@@ -15,6 +15,8 @@ CAPTURE_ACTION_TASK = "task"
 CAPTURE_ACTION_LATER = "later"
 CAPTURE_ACTION_BOSS = "boss"
 CAPTURE_ACTION_CANCEL = "cancel"
+CAPTURE_ACTION_EXPIRED_LATER = "expired_later"
+CAPTURE_ACTION_EXPIRED_CANCEL = "expired_cancel"
 
 
 @dataclass(slots=True, frozen=True)
@@ -58,5 +60,26 @@ def build_capture_button_specs() -> list[CaptureButtonSpec]:
         CaptureButtonSpec(
             text="Отмена",
             callback_data=build_capture_callback_data(CAPTURE_ACTION_CANCEL),
+        ),
+    ]
+
+
+def build_expired_capture_text(draft: CaptureDraft) -> str:
+    text = draft.text.strip()
+    if len(text) > 120:
+        text = f"{text[:117]}..."
+
+    return f"Есть старый черновик.\n{text}\nЧто сделать?"
+
+
+def build_expired_capture_button_specs() -> list[CaptureButtonSpec]:
+    return [
+        CaptureButtonSpec(
+            text="На потом",
+            callback_data=build_capture_callback_data(CAPTURE_ACTION_EXPIRED_LATER),
+        ),
+        CaptureButtonSpec(
+            text="Отмена",
+            callback_data=build_capture_callback_data(CAPTURE_ACTION_EXPIRED_CANCEL),
         ),
     ]

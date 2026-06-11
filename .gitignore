@@ -15,6 +15,7 @@ secrets/
 
 # Database
 data/*.db
+data/backups/
 
 # Google tokens
 data/gcal_token.json

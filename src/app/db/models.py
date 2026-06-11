@@ -108,6 +108,44 @@ class DailyPlan(Base):
     )
 
 
+class CaptureDraftRecord(Base):
+    __tablename__ = "capture_drafts"
+    __table_args__ = (
+        Index(
+            "ix_capture_drafts_user_status_created",
+            "telegram_chat_id",
+            "telegram_user_id",
+            "status",
+            "created_at",
+        ),
+        Index("ix_capture_drafts_status_expires", "status", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    telegram_chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="text")
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suggested_type: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="pending",
+    )
+
+
 class CrisisStack(Base):
     __tablename__ = "crisis_stacks"
     __table_args__ = (
