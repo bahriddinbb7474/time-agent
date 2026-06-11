@@ -5,8 +5,8 @@
 Alembic is not configured and is not listed in `requirements.txt`.
 Do not add Alembic until a separate dependency decision is made.
 
-Startup still calls `Base.metadata.create_all()` in `src/app/main.py`.
-Keep that behavior for now, but do not rely on it for production schema evolution.
+Startup runs `src/app/db/migration_runner.py` from `src/app/main.py`.
+`Base.metadata.create_all()` is no longer used in the production startup path.
 
 Current schema-changing migrations:
 

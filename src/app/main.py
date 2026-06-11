@@ -1,5 +1,6 @@
 ﻿import asyncio
 import logging
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 
@@ -17,8 +18,8 @@ from app.handlers.gcal import build_gcal_router
 from app.handlers.capture import router as capture_router
 from app.services.google_calendar_service import GoogleCalendarService
 
-from app.db.database import get_engine, get_sessionmaker
-from app.db.models import Base
+from app.db.database import get_sessionmaker
+from app.db.migration_runner import run_migrations
 from app.db.seed import seed_if_empty
 from app.db.middleware import DbSessionMiddleware
 from app.scheduler.scheduler import build_scheduler, recover_alerts
@@ -26,22 +27,21 @@ from app.scheduler.jobs import morning_briefing
 
 log = logging.getLogger("time-agent")
 
+DB_PATH = Path("data") / "app.db"
+
 
 async def init_db() -> None:
     """
-    Dev-safe DB initialization.
+    Production DB initialization.
 
-    Р’Р°Р¶РЅРѕ:
-    create_all() РІС‹Р·С‹РІР°РµС‚СЃСЏ РІСЃРµРіРґР°, С‡С‚РѕР±С‹ РїСЂРё РёР·РјРµРЅРµРЅРёРё ORM-СЃС…РµРјС‹
-    РЅРµРґРѕСЃС‚Р°СЋС‰РёРµ С‚Р°Р±Р»РёС†С‹ СЃРѕР·РґР°РІР°Р»РёСЃСЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.
+    Schema is managed by project migrations. Seed runs only after migrations.
     """
-    log.info("Ensuring DB schema via create_all()...")
-
-    engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    log.info("DB schema ensured (create_all).")
+    result = run_migrations(DB_PATH)
+    log.info(
+        "DB migrations checked: applied=%s skipped=%s",
+        result.applied,
+        result.skipped,
+    )
 
     Session = get_sessionmaker()
     async with Session() as session:

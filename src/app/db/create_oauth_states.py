@@ -6,6 +6,7 @@ from app.db.models import OAuthState  # noqa: F401 (важно, чтобы мо�
 
 
 async def main() -> None:
+    # Legacy GCal utility; scheduled for removal in Stage 16a.
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
