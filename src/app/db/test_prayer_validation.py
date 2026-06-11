@@ -1,7 +1,7 @@
 import asyncio
 import os
 import tempfile
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -60,7 +60,8 @@ async def main():
     assert PrayerTimesService.SCHOOL == 1
     assert str(APP_TZ) == "Asia/Tashkent"
 
-    target_day = date(2026, 6, 9)
+    target_day = datetime.now(APP_TZ).date() + timedelta(days=1)
+    cached_day = target_day + timedelta(days=1)
 
     with tempfile.TemporaryDirectory(prefix="time_agent_test_") as tmp_dir:
         db_path = Path(tmp_dir) / "prayer_validation_test.db"
@@ -123,7 +124,7 @@ async def main():
 
             session.add(
                 PrayerTime(
-                    date=date(2026, 6, 10),
+                    date=cached_day,
                     fajr=time(5, 0, tzinfo=APP_TZ),
                     dhuhr=time(12, 30, tzinfo=APP_TZ),
                     asr=time(15, 0, tzinfo=APP_TZ),
@@ -140,7 +141,7 @@ async def main():
                 rules_service=FakeRulesService(),
             )
             cached_result = await cached_validator.validate_event(
-                start_at=at(date(2026, 6, 10), 14, 50),
+                start_at=at(cached_day, 14, 50),
                 duration_min=20,
             )
             assert cached_result.reason_code == "prayer_conflict"
@@ -153,21 +154,21 @@ async def main():
 
             quiet_until = await _resolve_prayer_quiet_until(
                 session=session,
-                now=at(date(2026, 6, 10), 14, 50),
+                now=at(cached_day, 14, 50),
             )
-            assert quiet_until == at(date(2026, 6, 10), 15, 21)
+            assert quiet_until == at(cached_day, 15, 21)
 
-            PrayerTimesService._REFRESHED_MONTH_KEYS.add((2026, 6))
+            PrayerTimesService._REFRESHED_MONTH_KEYS.add((cached_day.year, cached_day.month))
             first_alert_ids = await ensure_prayer_alerts_for_day(
                 session=session,
-                target_date=date(2026, 6, 10),
+                target_date=cached_day,
                 chat_id=123456,
                 scheduler=None,
                 bot=None,
             )
             second_alert_ids = await ensure_prayer_alerts_for_day(
                 session=session,
-                target_date=date(2026, 6, 10),
+                target_date=cached_day,
                 chat_id=123456,
                 scheduler=None,
                 bot=None,
@@ -179,7 +180,7 @@ async def main():
                 await session.execute(
                     select(AlertQueue)
                     .where(AlertQueue.alert_type == "prayer_reminder")
-                    .where(AlertQueue.entity_id.like("2026-06-10:%"))
+                    .where(AlertQueue.entity_id.like(f"{cached_day.isoformat()}:%"))
                 )
             ).scalars().all()
             assert len(prayer_alerts) == 5
@@ -187,12 +188,12 @@ async def main():
             fajr_alert = next(
                 alert
                 for alert in prayer_alerts
-                if alert.entity_id == "2026-06-10:fajr"
+                if alert.entity_id == f"{cached_day.isoformat()}:fajr"
             )
             assert await _is_prayer_alert_stale(
                 session=session,
                 alert=fajr_alert,
-                now=at(date(2026, 6, 10), 13, 0),
+                now=at(cached_day, 13, 0),
             )
 
         await engine.dispose()

@@ -1,38 +1,22 @@
-import sqlite3
 import tempfile
 from pathlib import Path
 
-
-MIGRATION_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "migrations"
-    / "versions"
-    / "20260609_1300_add_daily_plan_lifecycle.sql"
-)
+from app.db.migration_runner import run_migrations
 
 
 def main():
     with tempfile.TemporaryDirectory(prefix="time_agent_migration_test_") as tmp_dir:
         db_path = Path(tmp_dir) / "migration_test.db"
+        result = run_migrations(db_path)
+        assert result.applied == [
+            "20260101_0000_baseline_pre_stage14",
+            "20260609_1300_add_daily_plan_lifecycle",
+        ]
+
+        import sqlite3
+
         conn = sqlite3.connect(db_path)
         try:
-            conn.executescript(
-                """
-                CREATE TABLE tasks (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title VARCHAR(256) NOT NULL,
-                    planned_at DATETIME NULL,
-                    duration_min INTEGER NOT NULL DEFAULT 30,
-                    status VARCHAR(16) NOT NULL DEFAULT 'todo',
-                    category VARCHAR(32) NOT NULL DEFAULT 'personal',
-                    context_status VARCHAR(32) NOT NULL DEFAULT 'normal',
-                    created_at DATETIME NOT NULL
-                );
-                """
-            )
-
-            conn.executescript(MIGRATION_PATH.read_text(encoding="utf-8"))
-
             task_columns = {
                 row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()
             }
@@ -58,7 +42,7 @@ def main():
         finally:
             conn.close()
 
-    print("PASS: DailyPlan migration smoke uses isolated temp SQLite DB")
+    print("PASS: DailyPlan migration smoke uses runner and isolated temp SQLite DB")
 
 
 if __name__ == "__main__":

@@ -8,17 +8,18 @@ Do not add Alembic until a separate dependency decision is made.
 Startup still calls `Base.metadata.create_all()` in `src/app/main.py`.
 Keep that behavior for now, but do not rely on it for production schema evolution.
 
-Current schema-changing migration:
+Current schema-changing migrations:
 
-- `versions/20260609_1300_add_daily_plan_lifecycle.sql` adds nullable `tasks.completed_at`, creates `daily_plans`, and records its version in `schema_migrations`.
+- `versions/20260101_0000_baseline_pre_stage14.sql` creates the pre-Stage 14 schema for clean installs.
+- `versions/20260609_1300_add_daily_plan_lifecycle.sql` adds nullable `tasks.completed_at` and creates `daily_plans`.
 
-Codex verified this migration only on a temporary SQLite DB. It has not been run against production `data/app.db`.
+Codex verified these migrations only on temporary SQLite DBs. They have not been run against production `data/app.db`.
 
 ## Local Migration Approach
 
 Future project-local migrations should live in `migrations/versions/`.
 
-Use a DB table named `schema_migrations` to track applied migration IDs:
+`src/app/db/migration_runner.py` owns the `schema_migrations` table and records applied migration IDs. Migration SQL files must not create or insert into `schema_migrations` themselves.
 
 ```sql
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -55,7 +56,7 @@ Example:
 2. Apply the migration to a copied DB first.
 3. Verify the app starts and core queries work.
 4. Apply to production only with explicit owner approval.
-5. Insert the migration version into `schema_migrations` in the same controlled step.
+5. Let the runner insert the migration version into `schema_migrations` in the same controlled transaction.
 
 ## Rules
 
