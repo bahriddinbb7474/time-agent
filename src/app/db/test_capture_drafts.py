@@ -3,6 +3,7 @@ import os
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -17,7 +18,7 @@ if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
     os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
 
 from app.db.models import Base, CaptureDraftRecord, Task
-from app.handlers.capture import capture_confirmation_callback
+from app.handlers.capture import capture_confirmation_callback, capture_voice_message
 from app.services.capture_confirmation_service import (
     CAPTURE_ACTION_BOSS,
     CAPTURE_ACTION_CANCEL,
@@ -27,13 +28,19 @@ from app.services.capture_confirmation_service import (
     build_capture_callback_data,
 )
 from app.services.capture_draft_service import (
+    CAPTURE_DRAFT_SOURCE_VOICE,
     CAPTURE_DRAFT_STATUS_CANCELLED,
     CAPTURE_DRAFT_STATUS_CONFIRMED,
     CAPTURE_DRAFT_STATUS_EXPIRED,
     CAPTURE_DRAFT_STATUS_PENDING,
     CaptureDraftService,
 )
-from app.services.capture_router_service import CAPTURE_KIND_LATER, CaptureDraft
+from app.services.capture_router_service import (
+    CAPTURE_KIND_LATER,
+    CAPTURE_KIND_TASK,
+    CaptureDraft,
+)
+from app.services.stt_provider import DisabledSTTProvider, FakeSTTProvider, STTResult
 
 
 CHAT_ID = 555
@@ -71,6 +78,58 @@ class FakeCallback:
 
     async def answer(self, text: str | None = None, *, show_alert: bool | None = None):
         self.answers.append((text, show_alert))
+
+
+class FakeVoice:
+    file_id = "voice-file-id"
+
+    def __init__(self, *, duration: int = 10, file_size: int | None = 1024):
+        self.duration = duration
+        self.file_size = file_size
+
+
+class FakeFile:
+    file_path = "telegram/voice.ogg"
+
+
+class FakeBot:
+    def __init__(self):
+        self.get_file_calls = 0
+        self.download_file_calls = 0
+
+    async def get_file(self, file_id: str):
+        self.get_file_calls += 1
+        assert file_id == "voice-file-id"
+        return FakeFile()
+
+    async def download_file(self, file_path: str, *, destination: Path):
+        self.download_file_calls += 1
+        assert file_path == "telegram/voice.ogg"
+        destination.write_bytes(b"fake voice")
+
+
+class FakeVoiceMessage:
+    def __init__(self, *, voice: FakeVoice | None = None):
+        self.voice = voice or FakeVoice()
+        self.chat = FakeChat()
+        self.from_user = FakeUser()
+        self.bot = FakeBot()
+        self.answers: list[tuple[str, object | None]] = []
+
+    async def answer(self, text: str, reply_markup=None):
+        self.answers.append((text, reply_markup))
+
+
+class RecordingSTTProvider(FakeSTTProvider):
+    def __init__(self, transcript: str):
+        super().__init__(transcript=transcript)
+        self.audio_parent: Path | None = None
+        self.audio_exists_during_call = False
+
+    async def transcribe_audio(self, audio_path: Path) -> STTResult:
+        self.audio_parent = audio_path.parent
+        self.audio_exists_during_call = audio_path.exists()
+        return await super().transcribe_audio(audio_path)
 
 
 def _draft(text: str, kind: str = CAPTURE_KIND_LATER) -> CaptureDraft:
@@ -247,11 +306,115 @@ async def test_ttl_expiration_waits_for_owner_before_later() -> None:
         tmp.cleanup()
 
 
+async def test_disabled_voice_does_not_download_or_create_draft() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            settings = SimpleNamespace(
+                stt_max_duration_sec=60,
+                stt_max_file_mb=10,
+            )
+            await capture_voice_message(
+                message,
+                session,
+                settings=settings,
+                stt_provider=DisabledSTTProvider(),
+            )
+
+            assert message.bot.get_file_calls == 0
+            assert message.bot.download_file_calls == 0
+            assert len(message.answers) == 1
+            assert await _count_tasks(session) == 0
+
+            result = await session.execute(select(CaptureDraftRecord))
+            assert list(result.scalars().all()) == []
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_voice_fake_stt_creates_db_draft_without_task() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            settings = SimpleNamespace(
+                stt_max_duration_sec=60,
+                stt_max_file_mb=10,
+            )
+            stt_provider = RecordingSTTProvider("personal Позвонить маме")
+
+            await capture_voice_message(
+                message,
+                session,
+                settings=settings,
+                stt_provider=stt_provider,
+            )
+
+            assert message.bot.get_file_calls == 1
+            assert message.bot.download_file_calls == 1
+            assert stt_provider.audio_exists_during_call is True
+            assert stt_provider.audio_parent is not None
+            assert not stt_provider.audio_parent.exists()
+            assert len(message.answers) == 1
+            assert message.answers[0][1] is not None
+            assert await _count_tasks(session) == 0
+
+            result = await session.execute(select(CaptureDraftRecord))
+            drafts = list(result.scalars().all())
+            assert len(drafts) == 1
+            draft = drafts[0]
+            assert draft.source == CAPTURE_DRAFT_SOURCE_VOICE
+            assert draft.raw_text == "personal Позвонить маме"
+            assert draft.transcript == "personal Позвонить маме"
+            assert draft.suggested_type == CAPTURE_KIND_TASK
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_voice_limits_reject_before_download() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        cases = [
+            FakeVoice(duration=61),
+            FakeVoice(file_size=(10 * 1024 * 1024) + 1),
+        ]
+        for voice in cases:
+            async with Session() as session:
+                message = FakeVoiceMessage(voice=voice)
+                settings = SimpleNamespace(
+                    stt_max_duration_sec=60,
+                    stt_max_file_mb=10,
+                )
+                await capture_voice_message(
+                    message,
+                    session,
+                    settings=settings,
+                    stt_provider=FakeSTTProvider(),
+                )
+
+                assert message.bot.get_file_calls == 0
+                assert message.bot.download_file_calls == 0
+                assert len(message.answers) == 1
+                assert await _count_tasks(session) == 0
+
+                result = await session.execute(select(CaptureDraftRecord))
+                assert list(result.scalars().all()) == []
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
 async def main_async() -> None:
     await test_draft_persists_and_restart_can_read_pending()
     await test_confirm_paths_create_items_and_mark_confirmed()
     await test_cancel_and_unknown_do_not_create_tasks()
     await test_ttl_expiration_waits_for_owner_before_later()
+    await test_disabled_voice_does_not_download_or_create_draft()
+    await test_voice_fake_stt_creates_db_draft_without_task()
+    await test_voice_limits_reject_before_download()
 
 
 def main() -> None:

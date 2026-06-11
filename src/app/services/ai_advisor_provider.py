@@ -25,3 +25,20 @@ class DisabledAIAdvisorProvider:
             reason=None,
             user_message="AI Advisor пока не включён.",
         )
+
+
+class FakeAIAdvisorProvider:
+    async def suggest_capture_action(self, text: str) -> AIAdvisorSuggestion:
+        return AIAdvisorSuggestion(
+            enabled=True,
+            action="later",
+            reason="fake-test-provider",
+            user_message="AI Advisor fake suggestion.",
+        )
+
+
+def get_ai_advisor_provider(settings) -> AIAdvisorProvider:
+    provider = getattr(settings, "advisor_provider", "disabled")
+    if provider == "fake":
+        return FakeAIAdvisorProvider()
+    return DisabledAIAdvisorProvider()
