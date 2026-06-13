@@ -23,7 +23,7 @@ _RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 class PrayerApiUnavailableError(RuntimeError):
-    """Raised when Aladhan API fails and no exact local cache exists for the date."""
+    """Raised when Aladhan API fails; DB cache is never used as fallback (no provenance metadata)."""
 
 
 @dataclass(slots=True)
@@ -187,9 +187,10 @@ class PrayerTimesService:
 
         Rule:
         - first request for a month forces refresh from API (with bounded retry) and overwrites cache rows
-        - then read target day from local DB cache
-        - if API unavailable after all retries: use exact cached row if present,
-          otherwise raise PrayerApiUnavailableError
+        - then read target day from local DB cache (normal cached path, unchanged)
+        - if API unavailable after all retries: log DB row status for diagnostics, then raise
+          PrayerApiUnavailableError — DB cache is NEVER used as emergency fallback because
+          prayer_times has no provenance metadata (city/country/method/school)
         """
         month_key = (target_date.year, target_date.month)
         if month_key not in self._REFRESHED_MONTH_KEYS:
@@ -204,20 +205,17 @@ class PrayerTimesService:
                     target_date.month,
                     fetch_exc,
                 )
-                fallback = await self._get_cached_month_fallback(target_date)
-                if fallback is not None:
-                    log.info(
-                        "Using exact cached fallback for %s (month key %s)",
+                existing_for_log = await self._get_row_by_date(target_date)
+                if existing_for_log is not None:
+                    log.warning(
+                        "DB cache row found for %s but not used as fallback: "
+                        "prayer_times has no provenance metadata (city/country/method/school)",
                         target_date,
-                        month_key,
                     )
-                    return fallback
-                log.error(
-                    "No exact cached fallback for %s — raising PrayerApiUnavailableError",
-                    target_date,
-                )
+                else:
+                    log.error("No DB cache row found for %s", target_date)
                 raise PrayerApiUnavailableError(
-                    f"Prayer API unavailable and no local cache for {target_date.isoformat()}"
+                    f"Prayer API unavailable for {target_date.isoformat()}"
                 ) from fetch_exc
 
         existing = await self._get_row_by_date(target_date)
@@ -233,14 +231,17 @@ class PrayerTimesService:
                 target_date,
                 fetch_exc,
             )
-            fallback = await self._get_cached_month_fallback(target_date)
-            if fallback is not None:
-                log.info(
-                    "Using exact cached fallback for %s (second fetch path)", target_date
+            existing_for_log = await self._get_row_by_date(target_date)
+            if existing_for_log is not None:
+                log.warning(
+                    "DB cache row found for %s but not used as fallback: "
+                    "prayer_times has no provenance metadata (city/country/method/school)",
+                    target_date,
                 )
-                return fallback
+            else:
+                log.error("No DB cache row found for %s", target_date)
             raise PrayerApiUnavailableError(
-                f"Prayer API unavailable and no local cache for {target_date.isoformat()}"
+                f"Prayer API unavailable for {target_date.isoformat()}"
             ) from fetch_exc
 
         existing = await self._get_row_by_date(target_date)
@@ -255,25 +256,6 @@ class PrayerTimesService:
         self,
         target_date: date,
     ) -> PrayerTimesDTO | None:
-        existing = await self._get_row_by_date(target_date)
-        if existing is None:
-            return None
-        return self._to_dto(existing)
-
-    async def _get_cached_month_fallback(
-        self,
-        target_date: date,
-    ) -> PrayerTimesDTO | None:
-        """
-        Returns cached prayer times for the exact target_date if a DB row exists.
-
-        Year and month are validated implicitly: the query uses the exact date, so only
-        a row for that precise calendar day is returned.  City, country, calculation method,
-        and school are class-level constants (CITY, COUNTRY, METHOD, SCHOOL) and cannot
-        differ between the cached rows and the current service configuration at runtime.
-
-        Returns None if no row exists for target_date (wrong month, wrong year, or never cached).
-        """
         existing = await self._get_row_by_date(target_date)
         if existing is None:
             return None

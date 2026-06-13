@@ -68,10 +68,13 @@ def _clear_month_key(*dates: date) -> None:
         PrayerTimesService._REFRESHED_MONTH_KEYS.discard((d.year, d.month))
 
 
-# ── Test 1: Timeout → retry bounded → exact cache found → data returned ──────
+# ── Test 1: Timeout → retry bounded → DB row present → NOT used, raises ──────
 
-async def test_timeout_retry_then_cache_fallback() -> None:
-    """asyncio.TimeoutError triggers exactly _MAX_ATTEMPTS attempts; cached row returned."""
+async def test_timeout_retry_exhausted_raises_unavailable() -> None:
+    """
+    asyncio.TimeoutError: exactly _MAX_ATTEMPTS attempts made; DB cache row exists
+    but is NOT used as fallback (no provenance metadata) → PrayerApiUnavailableError.
+    """
     target_date = date(2020, 1, 15)
     _clear_month_key(target_date)
     tmp, engine, Session = await _make_db()
@@ -86,13 +89,17 @@ async def test_timeout_retry_then_cache_fallback() -> None:
             attempt_count += 1
             raise asyncio.TimeoutError("Aladhan timeout")
 
+        raised = False
         async with Session() as session:
             service = PrayerTimesService(session)
             with mock.patch.object(PrayerTimesService, "fetch_month", always_timeout):
                 with mock.patch.object(asyncio, "sleep", AsyncMock()):
-                    result = await service.get_prayer_times(target_date)
+                    try:
+                        await service.get_prayer_times(target_date)
+                    except PrayerApiUnavailableError:
+                        raised = True
 
-        assert result.date == target_date, f"Expected {target_date}, got {result.date}"
+        assert raised, "Expected PrayerApiUnavailableError — DB cache must not be used"
         assert attempt_count == _MAX_ATTEMPTS, (
             f"Expected {_MAX_ATTEMPTS} attempts, got {attempt_count}"
         )
@@ -102,10 +109,13 @@ async def test_timeout_retry_then_cache_fallback() -> None:
         tmp.cleanup()
 
 
-# ── Test 2: HTTP 502 → retry bounded → exact cache found ─────────────────────
+# ── Test 2: HTTP 502 → retry bounded → DB row present → NOT used, raises ─────
 
-async def test_http_502_retry_then_cache_fallback() -> None:
-    """HTTP 502 triggers _MAX_ATTEMPTS retries; exact cached row returned."""
+async def test_http_502_retry_exhausted_raises_unavailable() -> None:
+    """
+    HTTP 502: _MAX_ATTEMPTS retries made; DB cache row exists but NOT used
+    (no provenance metadata) → PrayerApiUnavailableError.
+    """
     target_date = date(2020, 2, 15)
     _clear_month_key(target_date)
     tmp, engine, Session = await _make_db()
@@ -120,13 +130,17 @@ async def test_http_502_retry_then_cache_fallback() -> None:
             attempt_count += 1
             raise _make_http_error(502)
 
+        raised = False
         async with Session() as session:
             service = PrayerTimesService(session)
             with mock.patch.object(PrayerTimesService, "fetch_month", always_502):
                 with mock.patch.object(asyncio, "sleep", AsyncMock()):
-                    result = await service.get_prayer_times(target_date)
+                    try:
+                        await service.get_prayer_times(target_date)
+                    except PrayerApiUnavailableError:
+                        raised = True
 
-        assert result.date == target_date
+        assert raised, "Expected PrayerApiUnavailableError — DB cache must not be used"
         assert attempt_count == _MAX_ATTEMPTS
     finally:
         _clear_month_key(target_date)
@@ -156,7 +170,10 @@ async def test_http_429_triggers_retry() -> None:
             service = PrayerTimesService(session)
             with mock.patch.object(PrayerTimesService, "fetch_month", always_429):
                 with mock.patch.object(asyncio, "sleep", AsyncMock()):
-                    await service.get_prayer_times(target_date)
+                    try:
+                        await service.get_prayer_times(target_date)
+                    except PrayerApiUnavailableError:
+                        pass  # expected after retries exhausted
 
         assert attempt_count > 1, (
             f"Expected retry on HTTP 429, got only {attempt_count} attempt(s)"
@@ -357,7 +374,10 @@ async def test_attempt_count_never_exceeds_max() -> None:
             service = PrayerTimesService(session)
             with mock.patch.object(PrayerTimesService, "fetch_month", counting_fail):
                 with mock.patch.object(asyncio, "sleep", AsyncMock()):
-                    await service.get_prayer_times(target_date)
+                    try:
+                        await service.get_prayer_times(target_date)
+                    except PrayerApiUnavailableError:
+                        pass  # expected after all retries exhausted
 
         assert call_count == _MAX_ATTEMPTS, (
             f"Expected exactly {_MAX_ATTEMPTS} attempts, got {call_count}"
@@ -371,8 +391,8 @@ async def test_attempt_count_never_exceeds_max() -> None:
 # ── Runner ────────────────────────────────────────────────────────────────────
 
 async def main_async() -> None:
-    await test_timeout_retry_then_cache_fallback()
-    await test_http_502_retry_then_cache_fallback()
+    await test_timeout_retry_exhausted_raises_unavailable()
+    await test_http_502_retry_exhausted_raises_unavailable()
     await test_http_429_triggers_retry()
     await test_http_400_does_not_retry()
     await test_no_cache_after_retries_raises_unavailable()
@@ -385,7 +405,7 @@ async def main_async() -> None:
 def main() -> None:
     asyncio.run(main_async())
     print(
-        "PASS: prayer API retry bounded, cache fallback exact-match, "
+        "PASS: prayer API retry bounded, unverified DB cache rejected, "
         "no retry on 4xx, attempt count capped"
     )
 
