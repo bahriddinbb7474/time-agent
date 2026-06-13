@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.handlers.add import parse_add_payload
 from app.services.crisis_stack_service import CrisisStackService
-from app.services.task_sync_policy_service import KNOWN_CATEGORIES
+from app.services.categories import KNOWN_CATEGORIES
 
 
 CAPTURE_KIND_IGNORE = "ignore"

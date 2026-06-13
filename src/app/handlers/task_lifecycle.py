@@ -10,12 +10,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import APP_TZ, now_tz
+from app.services.categories import KNOWN_CATEGORIES
 from app.services.crisis_stack_service import CrisisStackService
 from app.services.daily_plan_service import DailyPlanService
-from app.services.google_calendar_service import GoogleCalendarService
+from app.services.task_create_service import TaskCreateService
 from app.services.task_service import TaskService
-from app.services.task_sync_service import TaskSyncService
-from app.services.task_sync_policy_service import KNOWN_CATEGORIES
 from app.services.validation_result import ConflictType
 
 router = Router()
@@ -210,22 +209,13 @@ async def edit_cmd(
     edit_payload = parts[1].strip()
     category, title, planned_at, duration = parse_task_payload(edit_payload)
 
-    async def bot_notify_fn(*_args, **_kwargs):
-        return None
-
-    gcal_service = GoogleCalendarService(
-        session_factory=lambda: session,
-        bot_notify_fn=bot_notify_fn,
-    )
-
-    sync_service = TaskSyncService(
+    task_create_service = TaskCreateService(
         session=session,
-        gcal_service=gcal_service,
         scheduler=scheduler,
         bot=message.bot,
     )
 
-    result = await sync_service.sync_update_task(
+    result = await task_create_service.update_task(
         task_id=task_id,
         title=title,
         planned_at=planned_at,
@@ -371,22 +361,13 @@ async def delete_cmd(
 
     task_id = int(payload)
 
-    async def bot_notify_fn(*_args, **_kwargs):
-        return None
-
-    gcal_service = GoogleCalendarService(
-        session_factory=lambda: session,
-        bot_notify_fn=bot_notify_fn,
-    )
-
-    sync_service = TaskSyncService(
+    task_create_service = TaskCreateService(
         session=session,
-        gcal_service=gcal_service,
         scheduler=scheduler,
         bot=message.bot,
     )
 
-    result = await sync_service.sync_delete_task(task_id=task_id)
+    result = await task_create_service.delete_task(task_id=task_id)
 
     await message.answer(result.user_message)
 

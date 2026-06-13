@@ -6,9 +6,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.handlers.add import parse_add_payload
-from app.services.google_calendar_service import GoogleCalendarService
+from app.services.task_create_service import CreateTaskResultDTO, TaskCreateService
 from app.services.task_service import TaskDTO, TaskService
-from app.services.task_sync_service import CreateTaskWithSyncResultDTO, TaskSyncService
 
 
 class CaptureActionService:
@@ -28,15 +27,14 @@ class CaptureActionService:
         text: str,
         *,
         user_id: int | None = None,
-    ) -> CreateTaskWithSyncResultDTO:
+    ) -> CreateTaskResultDTO:
         category, title, planned_at, duration_min = parse_add_payload(text)
-        sync_service = TaskSyncService(
+        task_service = TaskCreateService(
             session=self.session,
-            gcal_service=self._build_google_service(),
             scheduler=self.scheduler,
             bot=self.bot,
         )
-        return await sync_service.create_task_with_google_sync(
+        return await task_service.create_task(
             title=title,
             planned_at=planned_at,
             duration_min=duration_min,
@@ -61,15 +59,6 @@ class CaptureActionService:
             category="work",
             priority_code="BOSS_CRITICAL",
             user_id=user_id,
-        )
-
-    def _build_google_service(self) -> GoogleCalendarService:
-        async def bot_notify_fn(*_args, **_kwargs):
-            return None
-
-        return GoogleCalendarService(
-            session_factory=lambda: self.session,
-            bot_notify_fn=bot_notify_fn,
         )
 
     @staticmethod
