@@ -11,10 +11,23 @@ from app.db.database import get_sessionmaker
 from app.db.models import AlertQueue
 from app.services.boss_priority_service import BossPriorityService
 from app.services.family_contact_service import FamilyContactService
+from app.services.daily_context_service import DailyContextService
+from app.services.daily_plan_service import DailyPlanService
+from app.services.evening_planning_service import (
+    EveningPlanningInput,
+    build_evening_planning_message,
+)
+from app.services.morning_briefing_service import (
+    MorningBriefingInput,
+    build_morning_briefing_message,
+)
 from app.services.prayer_times_service import PrayerTimesService
+from app.services.prayer_protection import (
+    intervals_overlap,
+    iter_prayer_protected_windows,
+)
 from app.services.quran_service import QuranService
 from app.services.routine_service import RoutineService
-from app.services.rules_service import RulesService
 from app.services.task_service import TaskService
 
 log = logging.getLogger("time-agent.scheduler.jobs")
@@ -65,31 +78,105 @@ async def morning_briefing(bot, scheduler=None) -> None:
                 bot=bot,
             )
 
-        rules = await RulesService(session).list_rules()
-        timed, floating = await TaskService(session).list_today()
-
-    lines = ["рџ•— Р”РѕР±СЂРѕРµ СѓС‚СЂРѕ! РџР»Р°РЅ РЅР° СЃРµРіРѕРґРЅСЏ\n"]
-
-    lines.append("рџ›Ў Р—Р°С‰РёС‰С‘РЅРЅС‹Рµ СЃР»РѕС‚С‹:")
-    for r in rules:
-        lines.append(f"вЂў {r.name}: {r.start_time}-{r.end_time}")
-
-    lines.append("\nрџ“Њ Р—Р°РґР°С‡Рё РїРѕ РІСЂРµРјРµРЅРё:")
-    if timed:
-        for t in timed:
-            lines.append(f"вЂў {t.planned_at} вЂ” {t.title} ({t.duration_min} РјРёРЅ)")
-    else:
-        lines.append("вЂў (РїРѕРєР° РЅРµС‚)")
-
-    lines.append("\nрџ“ќ Р—Р°РґР°С‡Рё Р±РµР· РІСЂРµРјРµРЅРё:")
-    if floating:
-        for t in floating:
-            lines.append(f"вЂў #{t.id} вЂ” {t.title}")
-    else:
-        lines.append("вЂў (РїРѕРєР° РЅРµС‚)")
+        briefing_input = await _collect_morning_briefing_input(
+            session,
+            session_factory=Session,
+        )
+        message = build_morning_briefing_message(briefing_input)
 
     if cfg.allowed_telegram_id:
-        await bot.send_message(cfg.allowed_telegram_id, "\n".join(lines))
+        await bot.send_message(cfg.allowed_telegram_id, message)
+
+
+async def _collect_morning_briefing_input(
+    session,
+    session_factory=None,
+) -> MorningBriefingInput:
+    task_service = TaskService(session)
+    timed, floating = await task_service.list_today()
+    later_items = await task_service.list_later(limit=50)
+    daily_plan = await DailyPlanService(session).get_plan(datetime.now(APP_TZ).date())
+
+    quran_service = QuranService(session)
+    quran_summary = await quran_service.get_daily_summary()
+
+    return MorningBriefingInput(
+        timed_tasks=timed,
+        floating_tasks=floating,
+        daily_plan_text=daily_plan.text if daily_plan else None,
+        later_count=len(later_items),
+        google_today_lines=[],
+        prayer_lines=await _build_prayer_status_section(session),
+        quran_lines=[quran_service.build_deficit_message(quran_summary)],
+        health_lines=await _build_health_status_section(session),
+    )
+
+
+
+async def _send_hydration_runtime_ping(*, bot, chat_id: int | None) -> None:
+    """Minimal hydration runtime entry-point (send/check path)."""
+    if not chat_id:
+        return
+
+    now = datetime.now(APP_TZ)
+    blocked = False
+
+    try:
+        Session = get_sessionmaker()
+        async with Session() as session:
+            if await _is_prayer_quiet_now(session=session, now=now):
+                return
+
+            blocked = await _is_hydration_blocked_by_siyam_daylight(
+                session=session,
+                now=now,
+            )
+    except Exception:
+        log.exception("Hydration gating failed; continuing with send path")
+
+    if blocked:
+        return
+
+    try:
+        await bot.send_message(chat_id, "Hydration reminder: drink water.")
+    except Exception:
+        log.exception("Hydration runtime entry-point failed")
+
+
+async def _is_hydration_blocked_by_siyam_daylight(*, session, now: datetime) -> bool:
+    target_date = now.date()
+
+    policy = await DailyContextService(session).get_policy_for_date(target_date)
+    if policy is None or not policy.is_siyam_day:
+        return False
+
+    prayer_times = await PrayerTimesService(session).get_prayer_times(target_date)
+    fajr_at = datetime.combine(target_date, prayer_times.fajr, tzinfo=APP_TZ)
+    maghrib_at = datetime.combine(target_date, prayer_times.maghrib, tzinfo=APP_TZ)
+
+    return fajr_at <= now < maghrib_at
+
+
+async def _is_prayer_quiet_now(*, session, now: datetime) -> bool:
+    quiet_until = await _resolve_prayer_quiet_until(session=session, now=now)
+    return quiet_until is not None
+
+
+async def _resolve_prayer_quiet_until(*, session, now: datetime) -> datetime | None:
+    prayer_times_service = PrayerTimesService(session)
+    cached_prayer_times = await prayer_times_service.get_cached_prayer_times(now.date())
+    if cached_prayer_times is None:
+        return None
+
+    probe_end = now + timedelta(seconds=1)
+    for window in iter_prayer_protected_windows(
+        day=now.date(),
+        prayer_times=cached_prayer_times,
+    ):
+        if intervals_overlap(now, probe_end, window.start, window.end):
+            return window.end + timedelta(minutes=1)
+
+    return None
 
 
 async def family_daily_check_job(bot=None) -> None:
@@ -131,21 +218,17 @@ async def evening_summary(bot) -> None:
     cfg = load_config()
 
     async with Session() as session:
-        timed, floating = await TaskService(session).list_today()
+        task_service = TaskService(session)
+        timed, floating = await task_service.list_today()
+        unfinished_tasks = timed + floating
+        done_today = await task_service.list_done_for_date(datetime.now(APP_TZ).date())
+        later_items = await task_service.list_later(limit=5)
+        tomorrow_tasks = await task_service.list_tomorrow()
         quran_service = QuranService(session)
         quran_summary = await quran_service.get_daily_summary()
         prayer_section = await _build_prayer_status_section(session)
-
-        critical_tasks = [
-            t
-            for t in (timed + floating)
-            if "рџ”Ґ" in t.title or t.title.lower().startswith("С€РµС„ СЃСЂРѕС‡РЅРѕ:")
-        ]
-
-        open_tasks = [t for t in (timed + floating) if t.status != "done"]
-
         quran_lines = [quran_service.build_deficit_message(quran_summary)]
-
+        health_lines = await _build_health_status_section(session)
         followup_keyboard = None
         if not quran_summary.goal_reached and cfg.allowed_telegram_id:
             alert_id = await _ensure_quran_followup_alert(
@@ -157,49 +240,35 @@ async def evening_summary(bot) -> None:
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="рџ“– Р”РѕС‡РёС‚Р°СЋ СЃРµР№С‡Р°СЃ",
+                            text="📖 Дочитаю сейчас",
                             callback_data=f"quran_followup:read_now:{alert_id}",
                         ),
                         InlineKeyboardButton(
-                            text="рџ“€ РџРµСЂРµРЅРµСЃС‚Рё РЅР° Р·Р°РІС‚СЂР°",
+                            text="📈 Перенести на завтра",
                             callback_data=f"quran_followup:move_tomorrow:{alert_id}",
                         ),
                     ]
                 ]
             )
 
-    lines = ["рџ• Р’РµС‡РµСЂРЅРёР№ spiritual report\n"]
-
-    lines.append("рџ•‹ РќР°РјР°Р·С‹")
-    lines.extend(prayer_section)
-
-    lines.append("\nрџ“– РљРѕСЂР°РЅ")
-    lines.extend(quran_lines)
-
-    lines.append("\nрџ”Ґ Critical Р·Р°РґР°С‡Рё")
-    if critical_tasks:
-        for t in critical_tasks:
-            if t.planned_at:
-                lines.append(f"вЂў #{t.id} {t.planned_at} вЂ” {t.title} [{t.status}]")
-            else:
-                lines.append(f"вЂў #{t.id} вЂ” {t.title} [{t.status}]")
-    else:
-        lines.append("вЂў РђРєС‚РёРІРЅС‹С… critical Р·Р°РґР°С‡ РЅРµС‚.")
-
-    lines.append("\nрџ“Њ Р§С‚Рѕ РѕСЃС‚Р°Р»РѕСЃСЊ Р·Р°РєСЂС‹С‚СЊ СЃРµРіРѕРґРЅСЏ")
-    if open_tasks:
-        for t in open_tasks:
-            if t.planned_at:
-                lines.append(f"вЂў #{t.id} {t.planned_at} вЂ” {t.title} [{t.status}]")
-            else:
-                lines.append(f"вЂў #{t.id} вЂ” {t.title} [{t.status}]")
-    else:
-        lines.append("вЂў Р’СЃС‘ Р·Р°РєСЂС‹С‚Рѕ вњ…")
+        message = build_evening_planning_message(
+            EveningPlanningInput(
+                done_today=done_today,
+                unfinished_tasks=unfinished_tasks,
+                later_items=later_items,
+                tomorrow_tasks=tomorrow_tasks,
+                prayer_lines=prayer_section,
+                quran_lines=quran_lines,
+                health_lines=health_lines,
+                google_tomorrow_lines=[],
+            )
+        )
 
     if cfg.allowed_telegram_id:
+        await _send_hydration_runtime_ping(bot=bot, chat_id=cfg.allowed_telegram_id)
         await bot.send_message(
             cfg.allowed_telegram_id,
-            "\n".join(lines),
+            message,
             reply_markup=followup_keyboard,
         )
 
@@ -348,7 +417,11 @@ async def _handle_prayer_reminder(session, alert: AlertQueue, bot, scheduler) ->
             )
         return
 
-    text = f"🕋 Напоминание о намазе: {prayer_name}\nВремя намаза уже наступило."
+    text = _build_prayer_reminder_text(
+        prayer_name=prayer_name,
+        prayer_at_raw=payload.get("prayer_at"),
+        now=now,
+    )
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -425,7 +498,7 @@ async def _handle_boss_critical(session, alert: AlertQueue, bot, scheduler) -> N
         await crud.finalize_firing_alert(session, alert_id=alert.id, status="failed")
         return
 
-    title = payload.get("boss_title") or payload.get("text") or "РЁРµС„ СЃСЂРѕС‡РЅРѕ: Р·Р°РґР°С‡Р°"
+    title = payload.get("boss_title") or payload.get("text") or "Шеф срочно: задача"
     repeat_count = int(payload.get("repeat_count", 0))
     max_repeats = int(payload.get("max_repeats", 20))
     repeat_interval_min = alert.repeat_interval_min or 15
@@ -505,7 +578,7 @@ async def _handle_boss_critical(session, alert: AlertQueue, bot, scheduler) -> N
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="вњ… Critical Р·Р°РґР°С‡Р° РІС‹РїРѕР»РЅРµРЅР°",
+                    text="✅ Critical задача выполнена",
                     callback_data=f"boss_done:{alert.id}",
                 )
             ]
@@ -567,24 +640,53 @@ async def _handle_boss_critical(session, alert: AlertQueue, bot, scheduler) -> N
 
 async def _handle_quran_followup(session, alert: AlertQueue, bot, scheduler) -> None:
     payload = _load_payload(alert.payload_json)
+    now = datetime.now(APP_TZ)
     chat_id = payload.get("chat_id")
-    text = payload.get("text", "рџ“– РќР°РїРѕРјРёРЅР°РЅРёРµ РїРѕ РљРѕСЂР°РЅСѓ.")
+    safe_fallback_text = "📖 Напоминание по Корану.\nВыберите действие:"
+    raw_text = payload.get("text")
+    text = raw_text.strip() if isinstance(raw_text, str) else ""
+    if not text:
+        text = safe_fallback_text
+
+    mojibake_markers = ("Р’", "РЏ", "РЎ", "С‹", "в€", "рџ", "пё")
+    if any(marker in text for marker in mojibake_markers):
+        log.warning(
+            "Quran followup payload text looks mojibake for alert_id=%s; using fallback text",
+            alert.id,
+        )
+        text = safe_fallback_text
 
     if not chat_id:
         await crud.finalize_firing_alert(session, alert_id=alert.id, status="failed")
         return
 
+    quiet_until = await _resolve_prayer_quiet_until(session=session, now=now)
+    if quiet_until is not None:
+        payload["quieted_by_prayer"] = True
+        success = await crud.reschedule_firing_alert(
+            session,
+            alert_id=alert.id,
+            scheduled_for=quiet_until,
+            payload_json=json.dumps(payload, ensure_ascii=False),
+        )
+        if success:
+            _schedule_same_alert(
+                alert_id=alert.id,
+                scheduled_for=quiet_until,
+                scheduler=scheduler,
+                bot=bot,
+            )
         return
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="рџ“– Р”РѕС‡РёС‚Р°СЋ СЃРµР№С‡Р°СЃ",
+                    text="📖 Дочитаю сейчас",
                     callback_data=f"quran_followup:read_now:{alert.id}",
                 ),
                 InlineKeyboardButton(
-                    text="рџ“€ РџРµСЂРµРЅРµСЃС‚Рё РЅР° Р·Р°РІС‚СЂР°",
+                    text="📈 Перенести на завтра",
                     callback_data=f"quran_followup:move_tomorrow:{alert.id}",
                 ),
             ]
@@ -810,13 +912,13 @@ def _build_boss_runtime_message(
     is_critical: bool,
 ) -> str:
     if is_critical:
-        header = "рџ”Ґ РЁРµС„: РљР РРўРР§Р•РЎРљРђРЇ Р·Р°РґР°С‡Р°"
+        header = "🔥 Шеф: КРИТИЧЕСКАЯ задача"
     elif urgency_code == "critical":
-        header = "рџ”Ґ РЁРµС„: РІС‹СЃРѕРєРёР№ СЂРёСЃРє РїСЂРѕСЃСЂРѕС‡РєРё"
+        header = "🔥 Шеф: высокий риск просрочки"
     elif urgency_code == "high":
-        header = "вљ пёЏ РЁРµС„: СЃСЂРѕС‡РЅР°СЏ Р·Р°РґР°С‡Р°"
+        header = "⚠️ Шеф: срочная задача"
     else:
-        header = "рџ’ј РЁРµС„: Р·Р°РґР°С‡Р°"
+        header = "💼 Шеф: задача"
 
     lines = [header, title]
 
@@ -826,8 +928,30 @@ def _build_boss_runtime_message(
         )
 
     lines.append(f"Urgency: {urgency_code}")
-    lines.append("РџРѕРґС‚РІРµСЂРґРёС‚Рµ РІС‹РїРѕР»РЅРµРЅРёРµ РїРѕСЃР»Рµ Р·Р°РєСЂС‹С‚РёСЏ Р·Р°РґР°С‡Рё.")
+    lines.append("Подтвердите выполнение после закрытия задачи.")
     return "\n".join(lines)
+
+
+def _build_prayer_reminder_text(
+    *,
+    prayer_name: str,
+    prayer_at_raw,
+    now: datetime,
+) -> str:
+    prayer_at = None
+    if isinstance(prayer_at_raw, str) and prayer_at_raw.strip():
+        try:
+            prayer_at = datetime.fromisoformat(prayer_at_raw)
+            prayer_at = _ensure_app_tz(prayer_at)
+        except Exception:
+            prayer_at = None
+
+    if prayer_at is not None and now < prayer_at:
+        seconds_until = max(0, int((prayer_at - now).total_seconds()))
+        minutes_until = max(1, (seconds_until + 59) // 60)
+        return f"🕋 {prayer_name} через {minutes_until} минут. Готовься к намазу."
+
+    return f"🕋 {prayer_name}. Время намаза наступило."
 
 
 def _priority_from_urgency(*, urgency_code: str, is_critical: bool) -> int:
@@ -852,17 +976,34 @@ async def _build_prayer_status_section(session) -> list[str]:
         )
 
         if alert is None:
-            lines.append(f"вЂў {prayer_name}: РЅРµС‚ РґР°РЅРЅС‹С…")
+            lines.append(f"• {prayer_name}: нет данных")
             continue
 
         if alert.status == "done":
-            lines.append(f"вЂў {prayer_name}: РїРѕРґС‚РІРµСЂР¶РґС‘РЅ вњ…")
+            lines.append(f"• {prayer_name}: подтверждён ✅")
         elif alert.status in ("pending", "active", "firing"):
-            lines.append(f"вЂў {prayer_name}: РЅР°РїРѕРјРёРЅР°РЅРёРµ Р°РєС‚РёРІРЅРѕ вЏі")
+            lines.append(f"• {prayer_name}: напоминание активно ⏳")
         elif alert.status == "cancelled":
-            lines.append(f"вЂў {prayer_name}: С†РёРєР» РѕСЃС‚Р°РЅРѕРІР»РµРЅ")
+            lines.append(f"• {prayer_name}: цикл остановлен")
         else:
-            lines.append(f"вЂў {prayer_name}: {alert.status}")
+            lines.append(f"• {prayer_name}: {alert.status}")
+
+    return lines
+
+
+async def _build_health_status_section(session) -> list[str]:
+    today = datetime.now(APP_TZ).date()
+    policy = await DailyContextService(session).get_policy_for_date(today)
+    if policy is None:
+        return []
+
+    lines = [
+        "• Сиям: день поста" if policy.is_siyam_day else "• Сиям: обычный день"
+    ]
+    if policy.low_energy_mode:
+        lines.append("• Энергия: бережный режим")
+    if policy.hydration_daylight_suppressed:
+        lines.append("• Вода: дневные напоминания приглушены")
 
     return lines
 
@@ -888,7 +1029,7 @@ async def _ensure_quran_followup_alert(
         payload_json=json.dumps(
             {
                 "chat_id": chat_id,
-                "text": f"{summary_text}\n\nР’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ:",
+                "text": f"{summary_text}\n\nВыберите действие:",
             },
             ensure_ascii=False,
         ),

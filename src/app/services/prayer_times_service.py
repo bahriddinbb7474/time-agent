@@ -144,6 +144,15 @@ class PrayerTimesService:
 
         return self._to_dto(existing)
 
+    async def get_cached_prayer_times(
+        self,
+        target_date: date,
+    ) -> PrayerTimesDTO | None:
+        existing = await self._get_row_by_date(target_date)
+        if existing is None:
+            return None
+        return self._to_dto(existing)
+
     async def _get_row_by_date(self, target_date: date) -> PrayerTime | None:
         stmt = select(PrayerTime).where(PrayerTime.date == target_date)
         result = await self.session.execute(stmt)

@@ -1,5 +1,6 @@
-import asyncio
+﻿import asyncio
 import logging
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 
@@ -13,33 +14,32 @@ from app.handlers.add import router as add_router
 from app.handlers.today import router as today_router
 from app.handlers.task_lifecycle import router as task_lifecycle_router
 from app.handlers.quran import router as quran_router
-from app.handlers.gcal import build_gcal_router
-from app.services.google_calendar_service import GoogleCalendarService
+from app.handlers.capture import router as capture_router
 
-from app.db.database import get_engine, get_sessionmaker
-from app.db.models import Base
+from app.db.database import get_sessionmaker
+from app.db.migration_runner import run_migrations
 from app.db.seed import seed_if_empty
 from app.db.middleware import DbSessionMiddleware
 from app.scheduler.scheduler import build_scheduler, recover_alerts
+from app.scheduler.jobs import morning_briefing
 
 log = logging.getLogger("time-agent")
+
+DB_PATH = Path("data") / "app.db"
 
 
 async def init_db() -> None:
     """
-    Dev-safe DB initialization.
+    Production DB initialization.
 
-    Важно:
-    create_all() вызывается всегда, чтобы при изменении ORM-схемы
-    недостающие таблицы создавались автоматически.
+    Schema is managed by project migrations. Seed runs only after migrations.
     """
-    log.info("Ensuring DB schema via create_all()...")
-
-    engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    log.info("DB schema ensured (create_all).")
+    result = run_migrations(DB_PATH)
+    log.info(
+        "DB migrations checked: applied=%s skipped=%s",
+        result.applied,
+        result.skipped,
+    )
 
     Session = get_sessionmaker()
     async with Session() as session:
@@ -51,7 +51,7 @@ async def main() -> None:
     setup_logging()
     cfg = load_config()
 
-    log.info("Starting bot… TZ=%s allowed_id=%s", cfg.tz, cfg.allowed_telegram_id)
+    log.info("Starting bot... TZ=%s allowed_id=%s", cfg.tz, cfg.allowed_telegram_id)
 
     await init_db()
 
@@ -60,21 +60,16 @@ async def main() -> None:
     scheduler.start()
     log.info("Scheduler started")
 
+    try:
+        await morning_briefing(bot, scheduler)
+        log.info("Startup morning briefing completed")
+    except Exception:
+        log.exception("Startup morning briefing failed")
+
     dp = Dispatcher()
     dp["scheduler"] = scheduler
 
     Session = get_sessionmaker()
-
-    def session_factory():
-        return Session()
-
-    async def bot_notify_fn(user_id: int, text: str):
-        await bot.send_message(chat_id=user_id, text=text)
-
-    gcal_service = GoogleCalendarService(
-        session_factory=session_factory,
-        bot_notify_fn=bot_notify_fn,
-    )
 
     async with Session() as session:
         await recover_alerts(
@@ -96,7 +91,7 @@ async def main() -> None:
     dp.include_router(task_lifecycle_router)
     dp.include_router(today_router)
     dp.include_router(quran_router)
-    dp.include_router(build_gcal_router(gcal_service))
+    dp.include_router(capture_router)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)

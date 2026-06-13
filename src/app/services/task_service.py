@@ -30,6 +30,7 @@ class TaskDTO:
     status: str
     category: str
     context_status: str
+    completed_at: str | None = None
 
 
 class TaskService:
@@ -108,6 +109,41 @@ class TaskService:
     async def delete_task(self, task_id: int) -> bool:
         return await crud.delete_task(self.session, task_id)
 
+    async def mark_done(self, task_id: int) -> TaskDTO | None:
+        task = await crud.mark_task_done(self.session, task_id)
+        if task is None:
+            return None
+        return self._to_dto(task)
+
+    async def list_done_for_date(self, target_date) -> list[TaskDTO]:
+        tasks = await crud.list_done_tasks_for_date(self.session, target_date)
+        return [self._to_dto(t, time_only=True) for t in tasks]
+
+    async def create_later(self, title: str) -> TaskDTO:
+        task = await crud.create_later_task(self.session, title=title)
+        return self._to_dto(task)
+
+    async def list_later(self, limit: int = 20) -> list[TaskDTO]:
+        tasks = await crud.list_later_tasks(self.session, limit=limit)
+        return [self._to_dto(t, time_only=True) for t in tasks]
+
+    async def list_active_focus_candidates(self) -> list[TaskDTO]:
+        tasks = await crud.list_active_tasks(self.session)
+        return [self._to_dto(t, time_only=True) for t in tasks]
+
+    async def list_tomorrow(self) -> list[TaskDTO]:
+        now = now_tz()
+        day_start = (now + timedelta(days=1)).replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        day_end = day_start + timedelta(days=1)
+
+        tasks = await crud.list_tasks_for_day(self.session, day_start, day_end)
+        return [self._to_dto(t, time_only=True) for t in tasks]
+
     async def list_today(self) -> tuple[list[TaskDTO], list[TaskDTO]]:
         now = now_tz()
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -155,25 +191,10 @@ class TaskService:
         log.info("Crisis stack activated urgent_tasks=%s", urgent_tasks_count)
 
     async def _count_open_urgent_tasks(self, *, user_id: int) -> int:
-        stmt = (
-            select(Task)
-            .where(Task.status != "done")
-            .where(Task.status != "cancelled")
-        )
-
-        task_user_col = getattr(Task, "user_id", None)
-        if task_user_col is None:
-            log.warning(
-                "Crisis trigger skipped: user-scoped task filter is unavailable user_id=%s",
-                user_id,
-            )
-            return 0
-
-        stmt = stmt.where(task_user_col == user_id)
-
+        stmt = select(Task).where(Task.status == "todo")
         result = await self.session.execute(stmt)
         tasks = result.scalars().all()
-        return sum(1 for task in tasks if CrisisStackService.is_urgent_text(task.title))
+        return sum(1 for task in tasks if CrisisStackService.is_urgent_task(task))
 
     async def _resolve_context_status(
         self,
@@ -239,6 +260,12 @@ class TaskService:
         else:
             planned_at = None
 
+        completed_at = (
+            task.completed_at.astimezone(APP_TZ).strftime("%Y-%m-%d %H:%M")
+            if task.completed_at
+            else None
+        )
+
         return TaskDTO(
             id=task.id,
             title=task.title,
@@ -247,6 +274,7 @@ class TaskService:
             status=task.status,
             category=task.category,
             context_status=task.context_status,
+            completed_at=completed_at,
         )
 
 

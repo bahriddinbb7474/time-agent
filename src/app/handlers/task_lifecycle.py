@@ -3,17 +3,19 @@
 import re
 from datetime import datetime, timedelta
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import APP_TZ, now_tz
+from app.services.categories import KNOWN_CATEGORIES
 from app.services.crisis_stack_service import CrisisStackService
-from app.services.google_calendar_service import GoogleCalendarService
-from app.services.task_sync_service import TaskSyncService
-from app.services.task_sync_policy_service import KNOWN_CATEGORIES
+from app.services.daily_plan_service import DailyPlanService
+from app.services.task_create_service import TaskCreateService
+from app.services.task_service import TaskService
+from app.services.validation_result import ConflictType
 
 router = Router()
 
@@ -121,6 +123,60 @@ def parse_task_payload(text: str) -> tuple[str, str, datetime | None, int]:
     return category, title, planned_at, duration
 
 
+def _format_edit_result_message(result) -> str:
+    validation_result = result.validation_result
+    if (
+        validation_result is not None
+        and validation_result.conflict_type == ConflictType.PRAYER
+    ):
+        base = validation_result.message or result.user_message
+        return (
+            f"⚠️ {base}\n"
+            "Задача не изменена. Новое время нужно подтвердить через /edit."
+        )
+
+    return result.user_message
+
+
+def _format_focus_task(task) -> str:
+    return f"Фокус: #{task.id} — {task.title}\nСейчас делай это."
+
+
+def _format_crisis_stack(tasks) -> str:
+    urgent_tasks = CrisisStackService.urgent_tasks(tasks)
+    ordered_tasks = CrisisStackService.order_focus_tasks(urgent_tasks)
+    focus_task = ordered_tasks[0]
+
+    lines = [
+        f"Срочных задач: {len(urgent_tasks)}.",
+        f"Фокус: #{focus_task.id} — {focus_task.title}",
+    ]
+
+    if len(ordered_tasks) > 1:
+        lines.append("Дальше:")
+        for task in ordered_tasks[1:5]:
+            lines.append(f"• #{task.id} — {task.title}")
+
+    return "\n".join(lines)
+
+
+def _format_next_focus_line(task) -> str | None:
+    if task is None:
+        return None
+    return f"Следующий фокус: #{task.id} — {task.title}"
+
+
+async def _build_done_message(*, session: AsyncSession, task_id: int) -> str:
+    tasks = await TaskService(session).list_active_focus_candidates()
+    focus_task = CrisisStackService.select_focus_task(tasks)
+    next_focus_line = _format_next_focus_line(focus_task)
+
+    if next_focus_line is None:
+        return f"Готово: #{task_id}"
+
+    return f"Готово: #{task_id}\n{next_focus_line}"
+
+
 @router.message(Command("edit"))
 async def edit_cmd(
     message: Message,
@@ -153,22 +209,13 @@ async def edit_cmd(
     edit_payload = parts[1].strip()
     category, title, planned_at, duration = parse_task_payload(edit_payload)
 
-    async def bot_notify_fn(*_args, **_kwargs):
-        return None
-
-    gcal_service = GoogleCalendarService(
-        session_factory=lambda: session,
-        bot_notify_fn=bot_notify_fn,
-    )
-
-    sync_service = TaskSyncService(
+    task_create_service = TaskCreateService(
         session=session,
-        gcal_service=gcal_service,
         scheduler=scheduler,
         bot=message.bot,
     )
 
-    result = await sync_service.sync_update_task(
+    result = await task_create_service.update_task(
         task_id=task_id,
         title=title,
         planned_at=planned_at,
@@ -177,7 +224,127 @@ async def edit_cmd(
         user_id=message.from_user.id if message.from_user else None,
     )
 
-    await message.answer(result.user_message)
+    await message.answer(_format_edit_result_message(result))
+
+
+@router.message(Command("done"))
+async def done_cmd(message: Message, session: AsyncSession):
+    payload = message.text.removeprefix("/done").strip()
+
+    if not payload or not ID_RE.match(payload):
+        await message.answer("Формат: /done 12")
+        return
+
+    task_id = int(payload)
+    task = await TaskService(session).mark_done(task_id)
+
+    if task is None:
+        await message.answer(f"Задача #{task_id} не найдена.")
+        return
+
+    await message.answer(await _build_done_message(session=session, task_id=task.id))
+
+
+@router.message(Command("focus"))
+async def focus_cmd(message: Message, session: AsyncSession):
+    tasks = await TaskService(session).list_active_focus_candidates()
+    focus_task = CrisisStackService.select_focus_task(tasks)
+
+    if focus_task is None:
+        await message.answer("Фокус пуст.")
+        return
+
+    await message.answer(_format_focus_task(focus_task))
+
+
+@router.message(Command("crisis"))
+async def crisis_cmd(message: Message, session: AsyncSession):
+    tasks = await TaskService(session).list_active_focus_candidates()
+
+    if not CrisisStackService.is_crisis(tasks):
+        await message.answer("Кризиса нет. Попробуй /focus.")
+        return
+
+    await message.answer(_format_crisis_stack(tasks))
+
+
+@router.message(Command("later"))
+async def later_cmd(message: Message, session: AsyncSession):
+    payload = message.text.removeprefix("/later").strip()
+
+    if not payload:
+        await message.answer("Формат: /later текст")
+        return
+
+    task = await TaskService(session).create_later(payload)
+    await message.answer(f"На потом: #{task.id}")
+
+
+@router.message(Command("backlog"))
+async def backlog_cmd(message: Message, session: AsyncSession):
+    items = await TaskService(session).list_later(limit=20)
+
+    if not items:
+        await message.answer("На потом пусто.")
+        return
+
+    lines = ["На потом:"]
+    for item in items:
+        lines.append(f"#{item.id} — {item.title}")
+
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("boss"))
+async def boss_cmd(message: Message, session: AsyncSession):
+    payload = message.text.removeprefix("/boss").strip()
+
+    if not payload:
+        await message.answer("Формат: /boss текст")
+        return
+
+    task = await TaskService(session).create_task(
+        title=f"Шеф: {payload}",
+        planned_at=None,
+        duration_min=30,
+        category="work",
+        priority_code="BOSS_CRITICAL",
+        user_id=message.from_user.id if message.from_user else None,
+    )
+    await message.answer(f"Boss задача: #{task.id}")
+
+
+@router.message(Command("plan_tomorrow"))
+async def plan_tomorrow_cmd(message: Message, session: AsyncSession):
+    payload = message.text.removeprefix("/plan_tomorrow").strip()
+
+    if not payload:
+        await message.answer("Формат: /plan_tomorrow текст")
+        return
+
+    plan_date = now_tz().date() + timedelta(days=1)
+    await DailyPlanService(session).save_plan(plan_date=plan_date, text=payload)
+    await message.answer("План на завтра сохранён.")
+
+
+@router.callback_query(F.data.startswith("task_done:"))
+async def task_done_callback(callback: CallbackQuery, session: AsyncSession):
+    raw_task_id = (callback.data or "").removeprefix("task_done:")
+    if not ID_RE.match(raw_task_id):
+        await callback.answer("Неверный ID", show_alert=True)
+        return
+
+    task_id = int(raw_task_id)
+    task = await TaskService(session).mark_done(task_id)
+    if task is None:
+        await callback.answer("Задача не найдена", show_alert=True)
+        return
+
+    await callback.answer(f"Готово: #{task.id}")
+    if callback.message is not None:
+        await callback.message.answer(
+            await _build_done_message(session=session, task_id=task.id)
+        )
 
 
 @router.message(Command("delete"))
@@ -194,22 +361,13 @@ async def delete_cmd(
 
     task_id = int(payload)
 
-    async def bot_notify_fn(*_args, **_kwargs):
-        return None
-
-    gcal_service = GoogleCalendarService(
-        session_factory=lambda: session,
-        bot_notify_fn=bot_notify_fn,
-    )
-
-    sync_service = TaskSyncService(
+    task_create_service = TaskCreateService(
         session=session,
-        gcal_service=gcal_service,
         scheduler=scheduler,
         bot=message.bot,
     )
 
-    result = await sync_service.sync_delete_task(task_id=task_id)
+    result = await task_create_service.delete_task(task_id=task_id)
 
     await message.answer(result.user_message)
 

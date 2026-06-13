@@ -1,16 +1,51 @@
-﻿from aiogram import Router
+﻿from datetime import datetime
+
+from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import now_tz
 from app.services.daily_context_service import DailyContextService
 from app.services.rules_service import RulesService
 from app.services.task_service import TaskService
-from app.services.google_calendar_service import GoogleCalendarService
 from app.services.family_contact_service import FamilyContactService
+from app.services.prayer_times_service import PrayerTimesService
+from app.services.crisis_stack_service import CrisisStackService
 
 router = Router()
+
+
+def _build_today_done_keyboard(tasks) -> InlineKeyboardMarkup | None:
+    if not tasks:
+        return None
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"✅ Сделал #{task.id}",
+                    callback_data=f"task_done:{task.id}",
+                )
+            ]
+            for task in tasks
+        ]
+    )
+
+
+def _build_focus_hint(tasks) -> str | None:
+    if not tasks:
+        return None
+
+    if CrisisStackService.is_crisis(tasks):
+        urgent_count = len(CrisisStackService.urgent_tasks(tasks))
+        return f"⚠️ Срочных задач: {urgent_count}. /crisis"
+
+    focus_task = CrisisStackService.select_focus_task(tasks)
+    if focus_task is None:
+        return None
+
+    return f"Фокус: #{focus_task.id} — {focus_task.title}"
 
 
 @router.message(Command("siyam_on"))
@@ -33,7 +68,8 @@ async def siyam_off_today_cmd(message: Message, session: AsyncSession):
 
 @router.message(Command("today"))
 async def today_cmd(message: Message, session: AsyncSession):
-    today = now_tz().date()
+    now = now_tz()
+    today = now.date()
     daily_policy = await DailyContextService(session).get_policy_for_date(today)
 
     rules = await RulesService(session).list_rules()
@@ -48,20 +84,10 @@ async def today_cmd(message: Message, session: AsyncSession):
     except Exception:
         family_candidates = []
 
-    # ---- Google Calendar service ----
-    # простой режим: только чтение событий
-    gcal_service = GoogleCalendarService(
-        session_factory=lambda: session,
-        bot_notify_fn=lambda *_: None,
-    )
-
-    try:
-        gcal_events = await gcal_service.get_today_events()
-    except Exception:
-        gcal_events = []
-    # ---------------------------------
-
     lines = ["План на сегодня\n"]
+    focus_hint = _build_focus_hint(timed + floating)
+    if focus_hint:
+        lines.append(focus_hint)
 
     siyam_status = "ON" if daily_policy and daily_policy.is_siyam_day else "OFF"
     siyam_source = (
@@ -71,24 +97,25 @@ async def today_cmd(message: Message, session: AsyncSession):
     )
     lines.append(f"Siyam today: {siyam_status} ({siyam_source})")
 
+    prayer_times = await PrayerTimesService(session).get_prayer_times(today)
+    maghrib_at = datetime.combine(today, prayer_times.maghrib, tzinfo=now.tzinfo)
+    hydration_status = (
+        "OFF (Siyam active)"
+        if daily_policy and daily_policy.is_siyam_day and now < maghrib_at
+        else "ON (Drink water)"
+    )
+    lines.append(f"Hydration: {hydration_status}")
+
     # Protected slots
     lines.append("Защищённые слоты:")
     for r in rules:
         lines.append(f"• {r.name}: {r.start_time}-{r.end_time}")
 
-    # Google Calendar
-    lines.append("\nGoogle Calendar:")
-    if gcal_events:
-        for e in gcal_events:
-            lines.append(f"• {e['start']} — {e['summary']}")
-    else:
-        lines.append("• (нет событий)")
-
     # Timed tasks
     lines.append("\nЗадачи по времени:")
     if timed:
         for t in timed:
-            lines.append(f"• {t.planned_at} — {t.title} ({t.duration_min} мин)")
+            lines.append(f"• #{t.id} {t.planned_at} — {t.title} ({t.duration_min} мин)")
     else:
         lines.append("• (пока нет)")
 
@@ -108,6 +135,10 @@ async def today_cmd(message: Message, session: AsyncSession):
     else:
         lines.append("• (пока нет)")
 
-    await message.answer("\n".join(lines))
+    active_tasks = timed + floating
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=_build_today_done_keyboard(active_tasks),
+    )
 
 

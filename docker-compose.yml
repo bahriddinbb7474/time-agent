@@ -10,8 +10,6 @@ services:
       - ./logs:/app/logs
       - app_data:/app/data
       - C:/time-agent-secrets:/run/secrets:ro
-    ports:
-      - "8085:8085"
     restart: always
 
 volumes:

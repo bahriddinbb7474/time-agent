@@ -1,0 +1,161 @@
+import asyncio
+import os
+import tempfile
+from pathlib import Path
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+
+windows_zoneinfo = Path(r"C:\Program Files\Git\mingw64\share\zoneinfo")
+if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
+    os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
+
+from app.core.time import now_tz
+from app.db.models import Base, Task
+from app.scheduler.jobs import (
+    _collect_morning_briefing_input,
+)
+from app.services.crisis_stack_service import CrisisStackService
+from app.services.daily_plan_service import DailyPlanService
+from app.services.morning_briefing_service import (
+    MorningBriefingInput,
+    build_morning_briefing_message,
+)
+from app.services.task_service import TaskService
+
+
+async def main():
+    with tempfile.TemporaryDirectory(prefix="time_agent_test_") as tmp_dir:
+        db_path = Path(tmp_dir) / "morning_briefing_test.db"
+        engine = create_async_engine(
+            f"sqlite+aiosqlite:///{db_path.as_posix()}",
+            echo=False,
+            future=True,
+        )
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        async with Session() as session:
+            now = now_tz()
+            today_at = now.replace(hour=10, minute=0, second=0, microsecond=0)
+
+            session.add_all(
+                [
+                    Task(
+                        title="Prepare standup",
+                        planned_at=today_at,
+                        duration_min=30,
+                        status="todo",
+                        category="work",
+                        context_status="normal",
+                        created_at=now,
+                    ),
+                    Task(
+                        title="Срочно проверить договор",
+                        planned_at=None,
+                        duration_min=30,
+                        status="todo",
+                        category="work",
+                        context_status="normal",
+                        created_at=now,
+                    ),
+                    Task(
+                        title="Inbox idea",
+                        planned_at=None,
+                        duration_min=30,
+                        status="later",
+                        category="other",
+                        context_status="normal",
+                        created_at=now,
+                    ),
+                    Task(
+                        title="Hidden done task",
+                        planned_at=today_at,
+                        duration_min=30,
+                        status="done",
+                        category="work",
+                        context_status="normal",
+                        created_at=now,
+                    ),
+                    Task(
+                        title="Hidden cancelled task",
+                        planned_at=today_at,
+                        duration_min=30,
+                        status="cancelled",
+                        category="work",
+                        context_status="normal",
+                        created_at=now,
+                    ),
+                ]
+            )
+            await session.commit()
+
+            await DailyPlanService(session).save_plan(
+                plan_date=now.date(),
+                text="Deep work first.",
+            )
+
+            task_service = TaskService(session)
+            timed, floating = await task_service.list_today()
+            active_tasks = timed + floating
+            active_titles = [task.title for task in active_tasks]
+
+            assert active_titles == [
+                "Prepare standup",
+                "Срочно проверить договор",
+            ]
+            assert "Hidden done task" not in active_titles
+            assert "Hidden cancelled task" not in active_titles
+
+            later_items = await task_service.list_later(limit=5)
+            assert len(later_items) == 1
+            assert later_items[0].title == "Inbox idea"
+
+            focus_task = CrisisStackService.select_focus_task(active_tasks)
+            assert focus_task is not None
+            assert focus_task.title == "Срочно проверить договор"
+            assert not CrisisStackService.is_crisis(active_tasks)
+
+            message = build_morning_briefing_message(
+                MorningBriefingInput(
+                    timed_tasks=timed,
+                    floating_tasks=floating,
+                    daily_plan_text="Deep work first.",
+                    later_count=len(later_items),
+                    prayer_lines=["• Fajr: done"],
+                    quran_lines=["• Quran: review"],
+                    health_lines=["• Siyam: ordinary day"],
+                )
+            )
+
+            assert "Утро. План на сегодня" in message
+            assert "Saved plan" in message
+            assert "Deep work first." in message
+            assert "Фокус" in message
+            assert "Сегодня" in message
+            assert "Prepare standup" in message
+            assert "Срочно проверить договор" in message
+            assert "Google Calendar" not in message
+            assert "Намаз / защита" in message
+            assert "Коран / здоровье" in message
+            assert "1 в inbox. Без давления: /backlog" in message
+
+            collected = await _collect_morning_briefing_input(session)
+            assert len(collected.timed_tasks) == 1
+            assert len(collected.floating_tasks) == 1
+            assert collected.daily_plan_text == "Deep work first."
+            assert collected.later_count == 1
+            assert collected.prayer_lines
+            assert collected.quran_lines
+            assert collected.health_lines
+            assert collected.google_today_lines == []
+
+        await engine.dispose()
+
+    print("PASS: Morning briefing smoke test uses isolated temp SQLite DB")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
@@ -62,6 +62,15 @@ class DailyContextService:
             await self.session.commit()
             await self.session.refresh(row)
             return self._to_policy(row)
+
+        # Idempotent explicit override: if target state is already stored as explicit,
+        # skip write path to preserve updated_at and avoid extra commit.
+        if (
+            existing.siyam_state_source == self.SIYAM_SOURCE_EXPLICIT
+            and existing.is_siyam_day == is_siyam_day
+            and existing.hydration_daylight_suppressed == is_siyam_day
+        ):
+            return self._to_policy(existing)
 
         existing.is_siyam_day = is_siyam_day
         existing.siyam_state_source = self.SIYAM_SOURCE_EXPLICIT
@@ -134,3 +143,4 @@ class DailyContextService:
     @classmethod
     def _is_explicit(cls, row: DailyHealthContext) -> bool:
         return row.siyam_state_source == cls.SIYAM_SOURCE_EXPLICIT
+

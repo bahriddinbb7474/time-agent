@@ -17,10 +17,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import APP_TZ, now_tz
+from app.services.categories import KNOWN_CATEGORIES
 from app.services.crisis_stack_service import CrisisStackService
-from app.services.google_calendar_service import GoogleCalendarService
-from app.services.task_sync_service import TaskSyncService
-from app.services.task_sync_policy_service import KNOWN_CATEGORIES
+from app.services.task_create_service import TaskCreateService
 from app.services.validation_result import ConflictType, ValidationSeverity
 
 router = Router()
@@ -111,11 +110,11 @@ def parse_add_payload(text: str) -> tuple[str, str, datetime | None, int]:
         base = now_tz().date()
         raw_lower = raw.lower()
 
-        if "Р·Р°РІС‚СЂР°" in raw_lower:
+        if "завтра" in raw_lower:
             base = base + timedelta(days=1)
-            raw = re.sub(r"\bР·Р°РІС‚СЂР°\b", "", raw, flags=re.IGNORECASE)
-        elif "СЃРµРіРѕРґРЅСЏ" in raw_lower:
-            raw = re.sub(r"\bСЃРµРіРѕРґРЅСЏ\b", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"\bзавтра\b", "", raw, flags=re.IGNORECASE)
+        elif "сегодня" in raw_lower:
+            raw = re.sub(r"\bсегодня\b", "", raw, flags=re.IGNORECASE)
 
         raw = re.sub(r"\s+", " ", raw.replace(matched_token, "", 1)).strip()
 
@@ -290,27 +289,18 @@ def _extract_prayer_name(message_text: str | None) -> str:
 def _build_prayer_shift_message(*, prayer_name: str, suggested_slot_start: datetime) -> str:
     slot_text = suggested_slot_start.strftime("%H:%M")
     return (
-        f"Внимание: на это время выпадает Намаз {prayer_name}.\n"
-        f"Предлагаю сдвинуть задачу на {slot_text}. Согласны?"
+        f"В это время намаз {prayer_name}.\n"
+        f"Не ставлю автоматически. Ближайшее окно: {slot_text}."
     )
 
-def _build_sync_service(
+def _build_task_create_service(
     *,
     session: AsyncSession,
     scheduler: AsyncIOScheduler,
     bot,
-) -> TaskSyncService:
-    async def bot_notify_fn(*_args, **_kwargs):
-        return None
-
-    gcal_service = GoogleCalendarService(
-        session_factory=lambda: session,
-        bot_notify_fn=bot_notify_fn,
-    )
-
-    return TaskSyncService(
+) -> TaskCreateService:
+    return TaskCreateService(
         session=session,
-        gcal_service=gcal_service,
         scheduler=scheduler,
         bot=bot,
     )
@@ -342,13 +332,13 @@ async def add_cmd(
 
     category, title, planned_at, duration = parse_add_payload(payload)
 
-    sync_service = _build_sync_service(
+    task_create_service = _build_task_create_service(
         session=session,
         scheduler=scheduler,
         bot=message.bot,
     )
 
-    result = await sync_service.create_task_with_google_sync(
+    result = await task_create_service.create_task(
         title=title,
         planned_at=planned_at,
         duration_min=duration,
@@ -477,14 +467,14 @@ async def add_confirm_force(
         )
         return
 
-    sync_service = _build_sync_service(
+    task_create_service = _build_task_create_service(
         session=session,
         scheduler=scheduler,
         bot=callback.bot,
     )
 
     try:
-        result = await sync_service.create_task_with_google_sync(
+        result = await task_create_service.create_task(
             title=pending.title,
             planned_at=pending.planned_at,
             duration_min=pending.duration_min,
@@ -497,12 +487,12 @@ async def add_confirm_force(
         await callback.message.answer(result.user_message)
         await callback.answer()
     except Exception:
-        logger.exception("add_confirm_force failed during sync path")
+        logger.exception("add_confirm_force failed")
         await _finalize_confirmation_ui(callback)
         await callback.message.answer(
-            "⚠️ Не удалось синхронизировать задачу с Google Calendar. Попробуйте позже."
+            "⚠️ Ошибка создания задачи. Попробуйте позже."
         )
-        await callback.answer("Ошибка синхронизации", show_alert=True)
+        await callback.answer("Ошибка создания задачи", show_alert=True)
 
 
 @router.callback_query(F.data == f"{ADD_CONFIRM_PREFIX}:move")
@@ -533,14 +523,14 @@ async def add_confirm_move(
         await callback.answer("Свободное окно недоступно.", show_alert=True)
         return
 
-    sync_service = _build_sync_service(
+    task_create_service = _build_task_create_service(
         session=session,
         scheduler=scheduler,
         bot=callback.bot,
     )
 
     try:
-        result = await sync_service.create_task_with_google_sync(
+        result = await task_create_service.create_task(
             title=pending.title,
             planned_at=pending.suggested_slot_start,
             duration_min=pending.duration_min,
@@ -552,10 +542,10 @@ async def add_confirm_move(
         await callback.message.answer(result.user_message)
         await callback.answer()
     except Exception:
-        logger.exception("add_confirm_move failed during sync path")
+        logger.exception("add_confirm_move failed")
         await _finalize_confirmation_ui(callback)
         await callback.message.answer(
-            "⚠️ Не удалось синхронизировать задачу с Google Calendar. Попробуйте позже."
+            "⚠️ Ошибка создания задачи. Попробуйте позже."
         )
-        await callback.answer("Ошибка синхронизации", show_alert=True)
+        await callback.answer("Ошибка создания задачи", show_alert=True)
 

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import now_tz
-from app.db.models import AlertQueue, QuranProgressEntry, Rule, Task
+from app.db.models import AlertQueue, DailyPlan, QuranProgressEntry, Rule, Task
 
 
 # -------- RULES --------
@@ -58,6 +58,23 @@ async def create_task(
     return task
 
 
+async def create_later_task(session: AsyncSession, title: str) -> Task:
+    task = Task(
+        title=title,
+        planned_at=None,
+        duration_min=30,
+        category="other",
+        context_status="normal",
+        status="later",
+        created_at=now_tz(),
+    )
+
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
 async def get_task(session: AsyncSession, task_id: int) -> Task | None:
     stmt = select(Task).where(Task.id == task_id)
     res = await session.execute(stmt)
@@ -99,6 +116,39 @@ async def delete_task(session: AsyncSession, task_id: int) -> bool:
     return True
 
 
+async def mark_task_done(session: AsyncSession, task_id: int) -> Task | None:
+    task = await get_task(session, task_id)
+    if task is None:
+        return None
+
+    if task.status != "done":
+        task.status = "done"
+        task.completed_at = now_tz()
+        await session.commit()
+        await session.refresh(task)
+
+    return task
+
+
+async def list_done_tasks_for_date(
+    session: AsyncSession,
+    target_date: date,
+) -> list[Task]:
+    day_start = datetime.combine(target_date, datetime.min.time(), tzinfo=now_tz().tzinfo)
+    day_end = datetime.combine(target_date, datetime.max.time(), tzinfo=now_tz().tzinfo)
+    stmt = (
+        select(Task)
+        .where(Task.status == "done")
+        .where(Task.completed_at.is_not(None))
+        .where(Task.completed_at >= day_start)
+        .where(Task.completed_at <= day_end)
+        .order_by(Task.completed_at.asc(), Task.id.asc())
+    )
+
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
 async def list_tasks_for_day(
     session: AsyncSession,
     day_start: datetime,
@@ -107,6 +157,7 @@ async def list_tasks_for_day(
     stmt = (
         select(Task)
         .where(Task.planned_at.is_not(None))
+        .where(Task.status == "todo")
         .where(Task.planned_at >= day_start)
         .where(Task.planned_at < day_end)
         .order_by(Task.planned_at.asc())
@@ -126,6 +177,69 @@ async def list_floating_tasks(session: AsyncSession) -> list[Task]:
 
     res = await session.execute(stmt)
     return list(res.scalars().all())
+
+
+async def list_active_tasks(session: AsyncSession) -> list[Task]:
+    stmt = (
+        select(Task)
+        .where(Task.status == "todo")
+        .order_by(Task.planned_at.asc(), Task.id.asc())
+    )
+
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
+async def list_later_tasks(session: AsyncSession, limit: int = 20) -> list[Task]:
+    stmt = (
+        select(Task)
+        .where(Task.status == "later")
+        .order_by(Task.created_at.asc(), Task.id.asc())
+        .limit(limit)
+    )
+
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
+# -------- DAILY PLANS --------
+async def save_daily_plan(
+    session: AsyncSession,
+    *,
+    plan_date: date,
+    text: str,
+    source: str = "telegram_manual",
+) -> DailyPlan:
+    now = now_tz()
+    existing = await get_daily_plan(session, plan_date)
+    if existing is None:
+        plan = DailyPlan(
+            plan_date=plan_date,
+            text=text,
+            source=source,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(plan)
+        await session.commit()
+        await session.refresh(plan)
+        return plan
+
+    existing.text = text
+    existing.source = source
+    existing.updated_at = now
+    await session.commit()
+    await session.refresh(existing)
+    return existing
+
+
+async def get_daily_plan(
+    session: AsyncSession,
+    plan_date: date,
+) -> DailyPlan | None:
+    stmt = select(DailyPlan).where(DailyPlan.plan_date == plan_date)
+    res = await session.execute(stmt)
+    return res.scalars().first()
 
 
 # -------- ALERT QUEUE --------

@@ -6,12 +6,15 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import load_config
 from app.core.time import APP_TZ
 from app.db import crud
 from app.db.database import get_sessionmaker
 from app.db.models import AlertQueue
-from app.scheduler.jobs import morning_briefing, _schedule_same_alert
+from app.scheduler.jobs import morning_briefing, evening_summary, _schedule_same_alert
 from app.services.prayer_times_service import PrayerTimesService
 
 router = Router()
@@ -34,10 +37,56 @@ async def start_cmd(message: Message) -> None:
     await message.answer(text)
 
 
+@router.message(Command("health"))
+async def health_cmd(
+    message: Message,
+    session: AsyncSession,
+    scheduler: AsyncIOScheduler,
+) -> None:
+    cfg = load_config()
+
+    try:
+        await session.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:
+        logger.exception("Health DB check failed")
+        db_status = "fail"
+
+    scheduler_status = "running" if scheduler and scheduler.running else "stopped"
+    jobs_count = len(scheduler.get_jobs()) if scheduler else 0
+    debug_status = "on" if cfg.enable_debug_commands else "off"
+
+    await message.answer(
+        "\n".join(
+            [
+                "Health: ok",
+                f"TZ: {APP_TZ.key}",
+                f"Debug: {debug_status}",
+                f"DB: {db_status}",
+                f"Scheduler: {scheduler_status} ({jobs_count} jobs)",
+            ]
+        )
+    )
+
+
 @router.message(Command("test_brief"))
 async def test_brief_cmd(message: Message) -> None:
+    if not load_config().enable_debug_commands:
+        await message.answer("Debug commands are disabled.")
+        return
+
     await message.answer("🧪 Запускаю тестовый утренний брифинг…")
     await morning_briefing(message.bot)
+
+
+@router.message(Command("test_evening"))
+async def test_evening_cmd(message: Message) -> None:
+    if not load_config().enable_debug_commands:
+        await message.answer("Debug commands are disabled.")
+        return
+
+    await message.answer("🧪 Запускаю тестовый вечерний отчёт…")
+    await evening_summary(message.bot)
 
 
 @router.message(Command("prayer_today"))
