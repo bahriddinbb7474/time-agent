@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from typing import Any
@@ -10,6 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import APP_TZ
 from app.db.models import PrayerTime
+
+log = logging.getLogger("time-agent.prayer")
+
+_CONNECT_TIMEOUT = 3.0
+_TOTAL_TIMEOUT = 8.0
+_MAX_ATTEMPTS = 3
+_RETRY_BACKOFFS = (2.0, 4.0)  # seconds between attempt pairs (1→2, 2→3)
+_RETRYABLE_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+class PrayerApiUnavailableError(RuntimeError):
+    """Raised when Aladhan API fails and no exact local cache exists for the date."""
 
 
 @dataclass(slots=True)
@@ -55,7 +69,11 @@ class PrayerTimesService:
 
         async with aiohttp.ClientSession() as client:
             async with client.get(
-                url, params=params, timeout=aiohttp.ClientTimeout(total=30)
+                url,
+                params=params,
+                timeout=aiohttp.ClientTimeout(
+                    total=_TOTAL_TIMEOUT, connect=_CONNECT_TIMEOUT
+                ),
             ) as response:
                 response.raise_for_status()
                 payload: dict[str, Any] = await response.json()
@@ -115,26 +133,115 @@ class PrayerTimesService:
 
         await self.session.commit()
 
+    async def _fetch_month_with_retry(self, target_date: date) -> list[PrayerTimesDTO]:
+        """
+        Calls fetch_month() with bounded retry.
+
+        Retries on: asyncio.TimeoutError, connection errors, HTTP 429/5xx.
+        Does NOT retry on: other HTTP 4xx, response validation errors (ValueError).
+        Max attempts: _MAX_ATTEMPTS.  Worst-case wait: sum(_RETRY_BACKOFFS) + attempts*_TOTAL_TIMEOUT.
+        """
+        last_exc: BaseException | None = None
+
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            try:
+                return await self.fetch_month(target_date)
+            except (
+                asyncio.TimeoutError,
+                aiohttp.ClientConnectorError,
+                aiohttp.ServerConnectionError,
+            ) as exc:
+                last_exc = exc
+                log.warning(
+                    "Aladhan attempt %d/%d failed (network): %s",
+                    attempt,
+                    _MAX_ATTEMPTS,
+                    exc,
+                )
+            except aiohttp.ClientResponseError as exc:
+                if exc.status in _RETRYABLE_HTTP_STATUSES:
+                    last_exc = exc
+                    log.warning(
+                        "Aladhan attempt %d/%d failed (HTTP %s)",
+                        attempt,
+                        _MAX_ATTEMPTS,
+                        exc.status,
+                    )
+                else:
+                    log.warning(
+                        "Aladhan non-retryable HTTP %s — not retrying", exc.status
+                    )
+                    raise
+
+            if attempt < _MAX_ATTEMPTS:
+                backoff = _RETRY_BACKOFFS[attempt - 1]
+                log.info("Aladhan retry backoff %.1fs before attempt %d", backoff, attempt + 1)
+                await asyncio.sleep(backoff)
+
+        assert last_exc is not None
+        raise last_exc
+
     async def get_prayer_times(self, target_date: date) -> PrayerTimesDTO:
         """
         Main read API for the app.
 
         Rule:
-        - first request for a month forces refresh from API and overwrites cache rows
+        - first request for a month forces refresh from API (with bounded retry) and overwrites cache rows
         - then read target day from local DB cache
+        - if API unavailable after all retries: use exact cached row if present,
+          otherwise raise PrayerApiUnavailableError
         """
         month_key = (target_date.year, target_date.month)
         if month_key not in self._REFRESHED_MONTH_KEYS:
-            month_rows = await self.fetch_month(target_date)
-            await self.store_month(month_rows)
-            self._REFRESHED_MONTH_KEYS.add(month_key)
+            try:
+                month_rows = await self._fetch_month_with_retry(target_date)
+                await self.store_month(month_rows)
+                self._REFRESHED_MONTH_KEYS.add(month_key)
+            except (asyncio.TimeoutError, aiohttp.ClientError, ValueError) as fetch_exc:
+                log.error(
+                    "Aladhan API unavailable for %04d-%02d after all attempts: %s",
+                    target_date.year,
+                    target_date.month,
+                    fetch_exc,
+                )
+                fallback = await self._get_cached_month_fallback(target_date)
+                if fallback is not None:
+                    log.info(
+                        "Using exact cached fallback for %s (month key %s)",
+                        target_date,
+                        month_key,
+                    )
+                    return fallback
+                log.error(
+                    "No exact cached fallback for %s — raising PrayerApiUnavailableError",
+                    target_date,
+                )
+                raise PrayerApiUnavailableError(
+                    f"Prayer API unavailable and no local cache for {target_date.isoformat()}"
+                ) from fetch_exc
 
         existing = await self._get_row_by_date(target_date)
         if existing is not None:
             return self._to_dto(existing)
 
-        month_rows = await self.fetch_month(target_date)
-        await self.store_month(month_rows)
+        try:
+            month_rows = await self._fetch_month_with_retry(target_date)
+            await self.store_month(month_rows)
+        except (asyncio.TimeoutError, aiohttp.ClientError, ValueError) as fetch_exc:
+            log.error(
+                "Aladhan API unavailable on second fetch for %s: %s",
+                target_date,
+                fetch_exc,
+            )
+            fallback = await self._get_cached_month_fallback(target_date)
+            if fallback is not None:
+                log.info(
+                    "Using exact cached fallback for %s (second fetch path)", target_date
+                )
+                return fallback
+            raise PrayerApiUnavailableError(
+                f"Prayer API unavailable and no local cache for {target_date.isoformat()}"
+            ) from fetch_exc
 
         existing = await self._get_row_by_date(target_date)
         if existing is None:
@@ -148,6 +255,25 @@ class PrayerTimesService:
         self,
         target_date: date,
     ) -> PrayerTimesDTO | None:
+        existing = await self._get_row_by_date(target_date)
+        if existing is None:
+            return None
+        return self._to_dto(existing)
+
+    async def _get_cached_month_fallback(
+        self,
+        target_date: date,
+    ) -> PrayerTimesDTO | None:
+        """
+        Returns cached prayer times for the exact target_date if a DB row exists.
+
+        Year and month are validated implicitly: the query uses the exact date, so only
+        a row for that precise calendar day is returned.  City, country, calculation method,
+        and school are class-level constants (CITY, COUNTRY, METHOD, SCHOOL) and cannot
+        differ between the cached rows and the current service configuration at runtime.
+
+        Returns None if no row exists for target_date (wrong month, wrong year, or never cached).
+        """
         existing = await self._get_row_by_date(target_date)
         if existing is None:
             return None
