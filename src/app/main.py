@@ -14,9 +14,7 @@ from app.handlers.add import router as add_router
 from app.handlers.today import router as today_router
 from app.handlers.task_lifecycle import router as task_lifecycle_router
 from app.handlers.quran import router as quran_router
-from app.handlers.gcal import build_gcal_router
 from app.handlers.capture import router as capture_router
-from app.services.google_calendar_service import GoogleCalendarService
 
 from app.db.database import get_sessionmaker
 from app.db.migration_runner import run_migrations
@@ -73,17 +71,6 @@ async def main() -> None:
 
     Session = get_sessionmaker()
 
-    def session_factory():
-        return Session()
-
-    async def bot_notify_fn(user_id: int, text: str):
-        await bot.send_message(chat_id=user_id, text=text)
-
-    gcal_service = GoogleCalendarService(
-        session_factory=session_factory,
-        bot_notify_fn=bot_notify_fn,
-    )
-
     async with Session() as session:
         await recover_alerts(
             scheduler=scheduler,
@@ -104,7 +91,6 @@ async def main() -> None:
     dp.include_router(task_lifecycle_router)
     dp.include_router(today_router)
     dp.include_router(quran_router)
-    dp.include_router(build_gcal_router(gcal_service))
     dp.include_router(capture_router)
 
     await bot.delete_webhook(drop_pending_updates=True)

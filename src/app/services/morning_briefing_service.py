@@ -30,7 +30,6 @@ def build_morning_briefing_message(data: MorningBriefingInput) -> str:
         active_tasks,
         empty_text="• Активных задач нет.",
     )
-    _append_text_section(lines, "📆 Google Calendar", data.google_today_lines)
     _append_text_section(lines, "🕋 Намаз / защита", data.prayer_lines)
     _append_text_section(
         lines,

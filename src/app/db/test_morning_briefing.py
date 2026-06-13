@@ -1,8 +1,6 @@
 import asyncio
 import os
 import tempfile
-from dataclasses import dataclass
-from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -12,12 +10,10 @@ windows_zoneinfo = Path(r"C:\Program Files\Git\mingw64\share\zoneinfo")
 if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
     os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
 
-from app.core.time import APP_TZ, now_tz
+from app.core.time import now_tz
 from app.db.models import Base, Task
 from app.scheduler.jobs import (
-    _build_google_today_section,
     _collect_morning_briefing_input,
-    _format_google_today_event,
 )
 from app.services.crisis_stack_service import CrisisStackService
 from app.services.daily_plan_service import DailyPlanService
@@ -26,13 +22,6 @@ from app.services.morning_briefing_service import (
     build_morning_briefing_message,
 )
 from app.services.task_service import TaskService
-
-
-@dataclass(slots=True)
-class FakeGoogleEvent:
-    summary: str
-    start_at: object | None = None
-    all_day: bool = False
 
 
 async def main():
@@ -51,7 +40,6 @@ async def main():
         async with Session() as session:
             now = now_tz()
             today_at = now.replace(hour=10, minute=0, second=0, microsecond=0)
-            google_at = now.replace(hour=9, minute=30, second=0, microsecond=0)
 
             session.add_all(
                 [
@@ -130,26 +118,12 @@ async def main():
             assert focus_task.title == "Срочно проверить договор"
             assert not CrisisStackService.is_crisis(active_tasks)
 
-            fake_google_events = [
-                FakeGoogleEvent(summary="Daily sync", start_at=google_at),
-                FakeGoogleEvent(summary="Conference day", all_day=True),
-            ]
-            google_summaries = [event.summary for event in fake_google_events]
-            assert google_summaries == ["Daily sync", "Conference day"]
-            assert fake_google_events[0].start_at.astimezone(APP_TZ).strftime("%H:%M") == "09:30"
-            assert _format_google_today_event(fake_google_events[0]) == "• 09:30 — Daily sync"
-            assert _format_google_today_event(fake_google_events[1]) == "• весь день — Conference day"
-
             message = build_morning_briefing_message(
                 MorningBriefingInput(
                     timed_tasks=timed,
                     floating_tasks=floating,
                     daily_plan_text="Deep work first.",
                     later_count=len(later_items),
-                    google_today_lines=[
-                        "• 09:30 — Daily sync",
-                        "• весь день — Conference day",
-                    ],
                     prayer_lines=["• Fajr: done"],
                     quran_lines=["• Quran: review"],
                     health_lines=["• Siyam: ordinary day"],
@@ -163,8 +137,7 @@ async def main():
             assert "Сегодня" in message
             assert "Prepare standup" in message
             assert "Срочно проверить договор" in message
-            assert "Google Calendar" in message
-            assert "Daily sync" in message
+            assert "Google Calendar" not in message
             assert "Намаз / защита" in message
             assert "Коран / здоровье" in message
             assert "1 в inbox. Без давления: /backlog" in message
@@ -177,15 +150,7 @@ async def main():
             assert collected.prayer_lines
             assert collected.quran_lines
             assert collected.health_lines
-
-            collected_with_google = await _collect_morning_briefing_input(
-                session,
-                session_factory=Session,
-            )
-            assert collected_with_google.google_today_lines == ["• недоступен"]
-
-            unavailable_google = await _build_google_today_section(Session)
-            assert unavailable_google == ["• недоступен"]
+            assert collected.google_today_lines == []
 
         await engine.dispose()
 

@@ -48,7 +48,6 @@ def build_evening_planning_message(data: EveningPlanningInput) -> str:
         data.tomorrow_tasks,
         empty_text="• Локальных задач на завтра нет.",
     )
-    _append_text_section(lines, "📆 Google Calendar завтра", data.google_tomorrow_lines)
 
     lines.extend(["", "Что главное завтра?"])
     return "\n".join(lines)

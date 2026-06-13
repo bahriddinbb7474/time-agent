@@ -17,8 +17,6 @@ from app.services.evening_planning_service import (
     EveningPlanningInput,
     build_evening_planning_message,
 )
-from app.services.google_calendar_service import GoogleCalendarService
-from app.services.google_conflict_detector import detect_google_conflicts
 from app.services.morning_briefing_service import (
     MorningBriefingInput,
     build_morning_briefing_message,
@@ -102,22 +100,12 @@ async def _collect_morning_briefing_input(
     quran_service = QuranService(session)
     quran_summary = await quran_service.get_daily_summary()
 
-    google_today_lines = []
-    if session_factory is not None:
-        today = datetime.now(APP_TZ).date()
-        prayer_times = await PrayerTimesService(session).get_cached_prayer_times(today)
-        google_today_lines = await _build_google_today_section(
-            session_factory,
-            local_tasks=timed,
-            prayer_times=prayer_times,
-        )
-
     return MorningBriefingInput(
         timed_tasks=timed,
         floating_tasks=floating,
         daily_plan_text=daily_plan.text if daily_plan else None,
         later_count=len(later_items),
-        google_today_lines=google_today_lines,
+        google_today_lines=[],
         prayer_lines=await _build_prayer_status_section(session),
         quran_lines=[quran_service.build_deficit_message(quran_summary)],
         health_lines=await _build_health_status_section(session),
@@ -241,16 +229,6 @@ async def evening_summary(bot) -> None:
         prayer_section = await _build_prayer_status_section(session)
         quran_lines = [quran_service.build_deficit_message(quran_summary)]
         health_lines = await _build_health_status_section(session)
-        tomorrow_date = datetime.now(APP_TZ).date() + timedelta(days=1)
-        tomorrow_prayer_times = await PrayerTimesService(session).get_cached_prayer_times(
-            tomorrow_date
-        )
-        google_tomorrow_lines = await _build_google_tomorrow_section(
-            Session,
-            local_tasks=tomorrow_tasks,
-            prayer_times=tomorrow_prayer_times,
-        )
-
         followup_keyboard = None
         if not quran_summary.goal_reached and cfg.allowed_telegram_id:
             alert_id = await _ensure_quran_followup_alert(
@@ -282,7 +260,7 @@ async def evening_summary(bot) -> None:
                 prayer_lines=prayer_section,
                 quran_lines=quran_lines,
                 health_lines=health_lines,
-                google_tomorrow_lines=google_tomorrow_lines,
+                google_tomorrow_lines=[],
             )
         )
 
@@ -1028,110 +1006,6 @@ async def _build_health_status_section(session) -> list[str]:
         lines.append("• Вода: дневные напоминания приглушены")
 
     return lines
-
-
-async def _build_google_tomorrow_section(
-    session_factory,
-    *,
-    local_tasks=None,
-    prayer_times=None,
-) -> list[str]:
-    tomorrow = datetime.now(APP_TZ).date() + timedelta(days=1)
-    day_start = datetime.combine(tomorrow, time.min, tzinfo=APP_TZ)
-    day_end = day_start + timedelta(days=1)
-
-    service = GoogleCalendarService(
-        session_factory=session_factory,
-        bot_notify_fn=_noop_bot_notify,
-    )
-
-    try:
-        events = await service.list_events(time_min=day_start, time_max=day_end)
-    except Exception as exc:
-        log.info("Google Calendar tomorrow context unavailable: %s", exc)
-        return ["• недоступен"]
-
-    if not events:
-        return ["• событий нет"]
-
-    lines = [_format_google_tomorrow_event(event) for event in events[:5]]
-    if len(events) > 5:
-        lines.append(f"• ещё: {len(events) - 5}")
-    conflicts = detect_google_conflicts(
-        events=events,
-        local_tasks=local_tasks or [],
-        day=tomorrow,
-        prayer_times=prayer_times,
-    )
-    if conflicts:
-        lines.append(f"• Google conflicts: {len(conflicts)}. Review tomorrow.")
-    return lines
-
-
-async def _build_google_today_section(
-    session_factory,
-    *,
-    local_tasks=None,
-    prayer_times=None,
-) -> list[str]:
-    today = datetime.now(APP_TZ).date()
-    day_start = datetime.combine(today, time.min, tzinfo=APP_TZ)
-    day_end = day_start + timedelta(days=1)
-
-    service = GoogleCalendarService(
-        session_factory=session_factory,
-        bot_notify_fn=_noop_bot_notify,
-    )
-
-    try:
-        events = await service.list_events(time_min=day_start, time_max=day_end)
-    except Exception as exc:
-        log.info("Google Calendar today context unavailable: %s", exc)
-        return ["• недоступен"]
-
-    if not events:
-        return ["• событий нет"]
-
-    lines = [_format_google_today_event(event) for event in events[:5]]
-    if len(events) > 5:
-        lines.append(f"• ещё: {len(events) - 5}")
-    conflicts = detect_google_conflicts(
-        events=events,
-        local_tasks=local_tasks or [],
-        day=today,
-        prayer_times=prayer_times,
-    )
-    if conflicts:
-        lines.append(f"• Google conflicts: {len(conflicts)}. /gcal_conflicts")
-    return lines
-
-
-async def _noop_bot_notify(user_id: int, text: str) -> None:
-    return None
-
-
-def _format_google_today_event(event) -> str:
-    summary = getattr(event, "summary", "(no title)")
-    if getattr(event, "all_day", False):
-        return f"• весь день — {summary}"
-
-    start_at = getattr(event, "start_at", None)
-    if start_at is None:
-        return f"• {summary}"
-
-    return f"• {start_at.astimezone(APP_TZ).strftime('%H:%M')} — {summary}"
-
-
-def _format_google_tomorrow_event(event) -> str:
-    summary = getattr(event, "summary", "(no title)")
-    if getattr(event, "all_day", False):
-        return f"• весь день — {summary}"
-
-    start_at = getattr(event, "start_at", None)
-    if start_at is None:
-        return f"• {summary}"
-
-    return f"• {start_at.astimezone(APP_TZ).strftime('%H:%M')} — {summary}"
 
 
 async def _ensure_quran_followup_alert(
