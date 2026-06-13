@@ -11,7 +11,6 @@ class Config:
     allowed_telegram_id: int | None
     tz: str
     enable_debug_commands: bool
-    enable_google_writes: bool
     stt_provider: str
     advisor_provider: str
     llm_daily_limit: int
@@ -32,10 +31,6 @@ def load_config() -> Config:
         os.getenv("ENABLE_DEBUG_COMMANDS", "false").strip().lower()
         in {"1", "true", "yes", "on"}
     )
-    enable_google_writes = (
-        os.getenv("ENABLE_GOOGLE_WRITES", "false").strip().lower()
-        in {"1", "true", "yes", "on"}
-    )
     stt_provider = os.getenv("STT_PROVIDER", "disabled").strip().lower() or "disabled"
     advisor_provider = (
         os.getenv("ADVISOR_PROVIDER", "disabled").strip().lower() or "disabled"
@@ -49,7 +44,6 @@ def load_config() -> Config:
         allowed_telegram_id=allowed_id,
         tz=tz,
         enable_debug_commands=enable_debug_commands,
-        enable_google_writes=enable_google_writes,
         stt_provider=stt_provider,
         advisor_provider=advisor_provider,
         llm_daily_limit=llm_daily_limit,
