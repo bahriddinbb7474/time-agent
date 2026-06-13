@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 os.environ.setdefault("ALLOWED_TELEGRAM_ID", "123456789")
-os.environ.setdefault("ENABLE_GOOGLE_WRITES", "false")
 
 windows_zoneinfo = Path(r"C:\Program Files\Git\mingw64\share\zoneinfo")
 if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
