@@ -71,13 +71,16 @@ async def main() -> None:
 
     Session = get_sessionmaker()
 
-    async with Session() as session:
-        await recover_alerts(
-            scheduler=scheduler,
-            session=session,
-            bot=bot,
-        )
+    try:
+        async with Session() as session:
+            await recover_alerts(
+                scheduler=scheduler,
+                session=session,
+                bot=bot,
+            )
         log.info("Persistent alerts recovery completed")
+    except Exception:
+        log.exception("Alert recovery failed — startup continues without full recovery")
 
     dp.message.middleware(OwnerOnlyMiddleware(cfg.allowed_telegram_id))
     dp.message.middleware(DbSessionMiddleware())

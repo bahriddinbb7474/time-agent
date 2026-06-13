@@ -105,13 +105,19 @@ async def recover_alerts(
     )
 
     if cfg.allowed_telegram_id:
-        await ensure_prayer_alerts_for_day(
-            session=session,
-            target_date=now.date(),
-            chat_id=cfg.allowed_telegram_id,
-            scheduler=scheduler,
-            bot=bot,
-        )
+        try:
+            await ensure_prayer_alerts_for_day(
+                session=session,
+                target_date=now.date(),
+                chat_id=cfg.allowed_telegram_id,
+                scheduler=scheduler,
+                bot=bot,
+            )
+        except Exception:
+            log.exception(
+                "Prayer recovery degraded — ensure_prayer_alerts_for_day failed; "
+                "regular alert recovery will continue"
+            )
 
     alerts = await crud.list_open_alerts(session)
     open_alert_ids = {a.id for a in alerts}
