@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -92,10 +93,13 @@ class OpenRouterSTTProvider:
             )
 
         audio_b64 = base64.b64encode(audio_path.read_bytes()).decode("ascii")
+        fmt = suffix.lstrip(".")  # ".ogg" → "ogg"
         payload = {
             "model": self._model,
-            "file": audio_b64,
-            "file_name": audio_path.name,
+            "input_audio": {
+                "data": audio_b64,
+                "format": fmt,
+            },
         }
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -131,11 +135,7 @@ class OpenRouterSTTProvider:
                                 user_message="Голос расшифрован.",
                             )
                         if resp.status in {400, 401, 403}:
-                            log.error(
-                                "STT non-retryable HTTP %d (attempt %d)",
-                                resp.status,
-                                attempt,
-                            )
+                            await self._log_error_body(resp, fmt, len(audio_b64))
                             return STTResult(
                                 enabled=False,
                                 text=None,
@@ -177,6 +177,47 @@ class OpenRouterSTTProvider:
             text=None,
             user_message="Голос принял, расшифровка временно недоступна.",
         )
+
+    async def _log_error_body(self, resp, fmt: str, b64_len: int) -> None:
+        """Log HTTP 4xx error response safely — never logs key, auth header, or audio data."""
+        try:
+            raw = await resp.text()
+        except Exception:
+            log.error(
+                "STT HTTP %d body unreadable model=%s format=%s",
+                resp.status, self._model, fmt,
+            )
+            return
+        try:
+            body = json.loads(raw)
+            err = body.get("error") or body
+            if isinstance(err, dict):
+                msg = str(err.get("message", ""))[:200]
+                code = str(err.get("code", ""))[:50]
+            else:
+                msg = str(err)[:200]
+                code = ""
+            log.error(
+                "STT HTTP %d error: message=%r code=%r model=%s format=%s b64_len=%d",
+                resp.status, msg, code, self._model, fmt, b64_len,
+            )
+        except Exception:
+            safe = raw[:300]
+            if self._api_key and self._api_key in safe:
+                log.error(
+                    "STT HTTP %d non-JSON body suppressed (contains key) model=%s",
+                    resp.status, self._model,
+                )
+            elif "Authorization" in safe or "Bearer" in safe:
+                log.error(
+                    "STT HTTP %d non-JSON body suppressed (contains auth) model=%s",
+                    resp.status, self._model,
+                )
+            else:
+                log.error(
+                    "STT HTTP %d non-JSON body (first 300): %r model=%s format=%s",
+                    resp.status, safe, self._model, fmt,
+                )
 
 
 def get_stt_provider(settings) -> STTProvider:

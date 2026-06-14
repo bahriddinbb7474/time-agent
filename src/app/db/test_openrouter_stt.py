@@ -4,6 +4,8 @@ No real API calls, no production DB.
 Run: powershell -ExecutionPolicy Bypass -File scripts\codex_python.ps1 src/app/db/test_openrouter_stt.py
 """
 import asyncio
+import base64
+import logging
 import os
 import tempfile
 import unittest.mock as mock
@@ -25,13 +27,28 @@ from app.services.stt_provider import (
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-def _make_resp(status: int, json_data: dict | None = None) -> MagicMock:
+def _make_resp(
+    status: int,
+    json_data: dict | None = None,
+    text_body: str | None = None,
+) -> MagicMock:
     resp = MagicMock()
     resp.status = status
     resp.json = AsyncMock(return_value=json_data or {})
+    resp.text = AsyncMock(return_value=text_body or "")
     resp.__aenter__ = AsyncMock(return_value=resp)
     resp.__aexit__ = AsyncMock(return_value=False)
     return resp
+
+
+class _CapturingHandler(logging.Handler):
+    """Captures log records emitted by 'time-agent.stt' during a test."""
+    def __init__(self) -> None:
+        super().__init__(level=logging.DEBUG)
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(self.format(record))
 
 
 def _make_session(*responses: MagicMock) -> MagicMock:
@@ -299,6 +316,138 @@ async def test_factory_returns_openrouter_provider() -> None:
     )
 
 
+# ── Test 15: payload schema matches official contract ─────────────────────────
+
+async def test_payload_schema_matches_contract() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello"})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            await _provider().transcribe_audio(audio)
+        _, kw = session.post.call_args
+        payload = kw["json"]
+        assert "input_audio" in payload, "payload must have 'input_audio'"
+        assert "file" not in payload, "'file' must not be in payload (old field)"
+        assert "file_name" not in payload, "'file_name' must not be in payload (old field)"
+        ia = payload["input_audio"]
+        assert "data" in ia, "input_audio must have 'data'"
+        assert "format" in ia, "input_audio must have 'format'"
+        assert payload["model"] == "openai/whisper-large-v3"
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 16: format field is "ogg", not "audio/ogg" ──────────────────────────
+
+async def test_ogg_format_field_is_short_name() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello"})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            await _provider().transcribe_audio(audio)
+        _, kw = session.post.call_args
+        fmt = kw["json"]["input_audio"]["format"]
+        assert fmt == "ogg", f"format must be 'ogg', got {fmt!r}"
+        assert "audio/" not in fmt, "format must not contain MIME prefix 'audio/'"
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 17: raw base64, no data: URI prefix ──────────────────────────────────
+
+async def test_base64_is_raw_no_data_uri_prefix() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello"})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            await _provider().transcribe_audio(audio)
+        _, kw = session.post.call_args
+        b64val = kw["json"]["input_audio"]["data"]
+        assert not b64val.startswith("data:"), "base64 must not start with 'data:'"
+        decoded = base64.b64decode(b64val)
+        assert decoded == b"fake audio data", "decoded bytes must match original file content"
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 18: HTTP 400 error body safely logged (message + code present) ───────
+
+async def test_http_400_error_body_safely_logged() -> None:
+    secret_key = "sk-safe-log-test-key-xyzzy"
+    tmp, audio = _make_audio(".ogg")
+    try:
+        err_body = '{"error": {"message": "Invalid input_audio field", "code": "invalid_request"}}'
+        resp_400 = _make_resp(400, text_body=err_body)
+        session = _make_session(resp_400)
+
+        handler = _CapturingHandler()
+        logger = logging.getLogger("time-agent.stt")
+        logger.addHandler(handler)
+        try:
+            with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+                result = await _provider(key=secret_key).transcribe_audio(audio)
+        finally:
+            logger.removeHandler(handler)
+
+        combined = "\n".join(handler.messages)
+        assert "Invalid input_audio field" in combined, "error message must appear in log"
+        assert "invalid_request" in combined, "error code must appear in log"
+        assert secret_key not in combined, "API key must not appear in any log record"
+        assert result.enabled is False
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 19: API key and base64 audio data never appear in log records ────────
+
+async def test_key_and_base64_not_in_logs() -> None:
+    secret_key = "sk-must-not-appear-in-logs-99999"
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "clean log test"})
+        session = _make_session(resp)
+
+        handler = _CapturingHandler()
+        logger = logging.getLogger("time-agent.stt")
+        old_level = logger.level
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+        try:
+            with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+                result = await _provider(key=secret_key).transcribe_audio(audio)
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(old_level)
+
+        expected_b64 = base64.b64encode(b"fake audio data").decode("ascii")
+        combined = "\n".join(handler.messages)
+        assert secret_key not in combined, "API key must not appear in any log"
+        assert expected_b64 not in combined, "base64 audio data must not appear in any log"
+        assert result.enabled is True
+        assert result.text == "clean log test"
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 20: normal successful transcript not broken after fix ────────────────
+
+async def test_success_not_broken_after_fix() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "Завтра встреча в десять утра"})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.enabled is True
+        assert result.text == "Завтра встреча в десять утра"
+        assert result.user_message == "Голос расшифрован."
+    finally:
+        tmp.cleanup()
+
+
 # ── runner ────────────────────────────────────────────────────────────────────
 
 async def main_async() -> None:
@@ -316,11 +465,17 @@ async def main_async() -> None:
     await test_missing_api_key()
     await test_attempt_count_never_exceeds_max()
     await test_factory_returns_openrouter_provider()
+    await test_payload_schema_matches_contract()
+    await test_ogg_format_field_is_short_name()
+    await test_base64_is_raw_no_data_uri_prefix()
+    await test_http_400_error_body_safely_logged()
+    await test_key_and_base64_not_in_logs()
+    await test_success_not_broken_after_fix()
 
 
 def main() -> None:
     asyncio.run(main_async())
-    print("PASS: OpenRouter STT provider — all 14 tests")
+    print("PASS: OpenRouter STT provider — all 20 tests")
 
 
 if __name__ == "__main__":
