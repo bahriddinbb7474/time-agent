@@ -1,6 +1,7 @@
 import asyncio
 import os
 import tempfile
+import unittest.mock as mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +17,7 @@ windows_zoneinfo = Path(r"C:\Program Files\Git\mingw64\share\zoneinfo")
 if "PYTHONTZPATH" not in os.environ and windows_zoneinfo.exists():
     os.environ["PYTHONTZPATH"] = str(windows_zoneinfo)
 
-from app.db.models import Base, CaptureDraftRecord, Task
+from app.db.models import ApiUsageRecord, Base, CaptureDraftRecord, Task
 from app.handlers.capture import capture_confirmation_callback, capture_voice_message
 from app.services.capture_confirmation_service import (
     CAPTURE_ACTION_BOSS,
@@ -34,16 +35,59 @@ from app.services.capture_draft_service import (
     CAPTURE_DRAFT_STATUS_PENDING,
     CaptureDraftService,
 )
+from app.services.api_usage_service import ApiUsageService
 from app.services.capture_router_service import (
     CAPTURE_KIND_LATER,
     CAPTURE_KIND_TASK,
     CaptureDraft,
 )
-from app.services.stt_provider import DisabledSTTProvider, FakeSTTProvider, STTResult
+from app.services.stt_provider import (
+    DisabledSTTProvider,
+    FakeSTTProvider,
+    OpenRouterSTTProvider,
+    STTResult,
+    STTUsageInfo,
+)
 
 
 CHAT_ID = 555
 USER_ID = 123456789
+
+OPENROUTER_SETTINGS = SimpleNamespace(
+    stt_max_duration_sec=60,
+    stt_max_file_mb=10,
+    openrouter_stt_model="openai/whisper-large-v3-turbo",
+)
+
+
+class FakeOpenRouterProvider(OpenRouterSTTProvider):
+    """OpenRouterSTTProvider subclass that returns a canned result without HTTP calls."""
+    def __init__(self, result: STTResult) -> None:
+        super().__init__(api_key="sk-test", model="openai/whisper-large-v3-turbo")
+        self._fake_result = result
+
+    async def transcribe_audio(self, audio_path: Path) -> STTResult:
+        return self._fake_result
+
+
+class RaisingOpenRouterProvider(OpenRouterSTTProvider):
+    """OpenRouterSTTProvider subclass that always raises during transcription."""
+    def __init__(self) -> None:
+        super().__init__(api_key="sk-test", model="openai/whisper-large-v3-turbo")
+
+    async def transcribe_audio(self, audio_path: Path) -> STTResult:
+        raise RuntimeError("STT provider error")
+
+
+async def _count_usage_rows(session) -> int:
+    result = await session.execute(select(ApiUsageRecord))
+    return len(list(result.scalars().all()))
+
+
+async def _get_first_usage_row(session):
+    result = await session.execute(select(ApiUsageRecord))
+    rows = list(result.scalars().all())
+    return rows[0] if rows else None
 
 
 class FakeChat:
@@ -500,6 +544,361 @@ async def test_voice_cancelled_error_propagates() -> None:
         tmp.cleanup()
 
 
+async def test_openrouter_usage_recorded_on_success() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Позвонить маме",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=5.0, estimated_cost_usd=0.001),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            assert await _count_usage_rows(session) == 1, "one api_usage row must be created"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_provider_column_is_openrouter() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест провайдера",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=3.0, estimated_cost_usd=0.0),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert row.provider == "openrouter", f"provider must be 'openrouter', got {row.provider!r}"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_service_type_is_stt() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест типа сервиса",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=2.0, estimated_cost_usd=0.0),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert row.service_type == "stt", f"service_type must be 'stt', got {row.service_type!r}"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_model_from_settings() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест модели",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=1.0, estimated_cost_usd=0.0),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert row.model == OPENROUTER_SETTINGS.openrouter_stt_model, (
+                f"model must match settings, got {row.model!r}"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_request_count_is_one() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест счётчика",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=1.5, estimated_cost_usd=0.0),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert row.request_count == 1, f"request_count must be 1, got {row.request_count}"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_audio_seconds_from_result() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест секунд",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=7.3, estimated_cost_usd=0.002),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert abs(row.audio_seconds - 7.3) < 0.001, (
+                f"audio_seconds must be 7.3, got {row.audio_seconds}"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_cost_from_result() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест стоимости",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=4.0, estimated_cost_usd=0.0025),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert abs(row.estimated_cost_usd - 0.0025) < 1e-9, (
+                f"estimated_cost_usd must be 0.0025, got {row.estimated_cost_usd}"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_fallback_to_voice_duration() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage(voice=FakeVoice(duration=10))
+            stt_result = STTResult(
+                enabled=True, text="personal Тест фолбэка",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=None, estimated_cost_usd=None),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert abs(row.audio_seconds - 10.0) < 0.001, (
+                f"audio_seconds must fall back to voice_duration=10, got {row.audio_seconds}"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_cost_fallback_to_zero() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест нулевой стоимости",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=None, estimated_cost_usd=None),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert row.estimated_cost_usd == 0.0, (
+                f"estimated_cost_usd must fall back to 0.0, got {row.estimated_cost_usd}"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_status_success() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест статуса успеха",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=2.0, estimated_cost_usd=0.0),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert row.status == "success", f"status must be 'success', got {row.status!r}"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_status_error_on_stt_exception() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            provider = RaisingOpenRouterProvider()
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            assert len(message.answers) == 1
+            assert message.answers[0][0] == "Не удалось обработать голос. Отправь текстом."
+            row = await _get_first_usage_row(session)
+            assert row is not None, "api_usage row must be created even on STT error"
+            assert row.status == "error", f"status must be 'error', got {row.status!r}"
+            result = await session.execute(select(CaptureDraftRecord))
+            assert list(result.scalars().all()) == [], "no draft must be created on STT error"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_not_recorded_on_download_error() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+
+            class _FailingBot:
+                async def get_file(self, file_id: str):
+                    return FakeFile()
+
+                async def download_file(self, file_path: str, *, destination: Path):
+                    raise RuntimeError("Telegram download failed")
+
+            message.bot = _FailingBot()
+            provider = FakeOpenRouterProvider(
+                STTResult(enabled=True, text="never reached", user_message="")
+            )
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            assert await _count_usage_rows(session) == 0, (
+                "no api_usage row must be created when download fails (no STT request made)"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_fake_provider_no_usage_recorded() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            settings = SimpleNamespace(stt_max_duration_sec=60, stt_max_file_mb=10)
+            await capture_voice_message(
+                message, session, settings=settings,
+                stt_provider=RecordingSTTProvider("personal Позвонить маме"),
+            )
+            assert await _count_usage_rows(session) == 0, (
+                "FakeSTTProvider must not record api_usage rows"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_savepoint_isolation() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text="personal Тест изоляции",
+                user_message="Голос расшифрован.",
+                usage=STTUsageInfo(audio_seconds=5.0, estimated_cost_usd=0.001),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+
+            original_record_stt = ApiUsageService.record_stt
+
+            async def _fail_record_stt(self_inner, **kwargs):
+                raise RuntimeError("intentional usage write failure")
+
+            ApiUsageService.record_stt = _fail_record_stt
+            try:
+                await capture_voice_message(
+                    message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+                )
+            finally:
+                ApiUsageService.record_stt = original_record_stt
+
+            draft_result = await session.execute(select(CaptureDraftRecord))
+            drafts = list(draft_result.scalars().all())
+            assert len(drafts) == 1, (
+                f"draft must be created even when usage recording fails, got {len(drafts)}"
+            )
+            assert await _count_usage_rows(session) == 0, "no usage row when write failed"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_usage_recorded_on_empty_transcript() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=True, text=None,
+                user_message="Голос принял, но не смог разобрать слова.",
+                usage=STTUsageInfo(audio_seconds=1.5, estimated_cost_usd=0.0),
+            )
+            provider = FakeOpenRouterProvider(stt_result)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            assert await _count_usage_rows(session) == 1, (
+                "usage must be recorded even when transcript is empty"
+            )
+            result = await session.execute(select(CaptureDraftRecord))
+            assert list(result.scalars().all()) == [], "no draft when transcript is empty"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
 async def main_async() -> None:
     await test_draft_persists_and_restart_can_read_pending()
     await test_confirm_paths_create_items_and_mark_confirmed()
@@ -511,11 +910,26 @@ async def main_async() -> None:
     await test_voice_telegram_download_error_gives_safe_message()
     await test_voice_unexpected_provider_exception_gives_safe_message()
     await test_voice_cancelled_error_propagates()
+    await test_openrouter_usage_recorded_on_success()
+    await test_openrouter_usage_provider_column_is_openrouter()
+    await test_openrouter_usage_service_type_is_stt()
+    await test_openrouter_usage_model_from_settings()
+    await test_openrouter_usage_request_count_is_one()
+    await test_openrouter_usage_audio_seconds_from_result()
+    await test_openrouter_usage_cost_from_result()
+    await test_openrouter_usage_fallback_to_voice_duration()
+    await test_openrouter_usage_cost_fallback_to_zero()
+    await test_openrouter_usage_status_success()
+    await test_openrouter_usage_status_error_on_stt_exception()
+    await test_openrouter_usage_not_recorded_on_download_error()
+    await test_fake_provider_no_usage_recorded()
+    await test_openrouter_usage_savepoint_isolation()
+    await test_openrouter_usage_recorded_on_empty_transcript()
 
 
 def main() -> None:
     asyncio.run(main_async())
-    print("PASS: capture drafts persist, expire, and require owner confirmation")
+    print("PASS: capture drafts — all 25 tests")
 
 
 if __name__ == "__main__":

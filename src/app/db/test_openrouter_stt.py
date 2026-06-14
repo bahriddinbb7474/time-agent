@@ -19,6 +19,7 @@ os.environ.setdefault("ALLOWED_TELEGRAM_ID", "123456789")
 import app.services.stt_provider as stt_mod
 from app.services.stt_provider import (
     OpenRouterSTTProvider,
+    STTUsageInfo,
     _MAX_ATTEMPTS,
     get_stt_provider,
 )
@@ -522,6 +523,232 @@ async def test_success_not_broken_after_fix() -> None:
         tmp.cleanup()
 
 
+# ── Test 25: STTUsageInfo dataclass exists with correct fields ────────────────
+
+async def test_stt_usage_info_dataclass_exists() -> None:
+    info = STTUsageInfo()
+    assert info.audio_seconds is None, "default audio_seconds must be None"
+    assert info.estimated_cost_usd is None, "default estimated_cost_usd must be None"
+    info2 = STTUsageInfo(audio_seconds=1.5, estimated_cost_usd=0.0002)
+    assert info2.audio_seconds == 1.5
+    assert info2.estimated_cost_usd == 0.0002
+
+
+# ── Test 26: usage populated on HTTP 200 with usage data ─────────────────────
+
+async def test_usage_populated_on_success_with_usage_data() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": 1.2, "cost": 0.0001}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None, "usage must be present on HTTP 200"
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 27: audio_seconds field correct ─────────────────────────────────────
+
+async def test_usage_audio_seconds_value_correct() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": 1.2, "cost": 0.0001}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.audio_seconds == 1.2, (
+            f"audio_seconds must be 1.2, got {result.usage.audio_seconds!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 28: estimated_cost_usd field correct ─────────────────────────────────
+
+async def test_usage_cost_value_correct() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": 1.2, "cost": 0.0001}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.estimated_cost_usd == 0.0001, (
+            f"estimated_cost_usd must be 0.0001, got {result.usage.estimated_cost_usd!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 29: usage fields None when no usage key in response ──────────────────
+
+async def test_usage_none_when_no_usage_key() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello"})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None, "STTUsageInfo object must be present"
+        assert result.usage.audio_seconds is None, "audio_seconds must be None when missing"
+        assert result.usage.estimated_cost_usd is None, "cost must be None when missing"
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 30: usage fields None when usage is empty dict ──────────────────────
+
+async def test_usage_none_when_empty_usage_dict() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.audio_seconds is None
+        assert result.usage.estimated_cost_usd is None
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 31: zero seconds is a valid value ────────────────────────────────────
+
+async def test_usage_zero_seconds_accepted() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": 0.0, "cost": 0.0}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.audio_seconds == 0.0
+        assert result.usage.estimated_cost_usd == 0.0
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 32: negative seconds normalized to None ─────────────────────────────
+
+async def test_usage_negative_seconds_normalized_to_none() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": -1.0, "cost": 0.001}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.audio_seconds is None, (
+            f"negative seconds must normalize to None, got {result.usage.audio_seconds!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 33: NaN seconds normalized to None ───────────────────────────────────
+
+async def test_usage_nan_seconds_normalized_to_none() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": float("nan"), "cost": 0.001}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.audio_seconds is None, (
+            f"NaN seconds must normalize to None, got {result.usage.audio_seconds!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 34: +inf seconds normalized to None ─────────────────────────────────
+
+async def test_usage_inf_seconds_normalized_to_none() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": float("inf"), "cost": 0.001}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.audio_seconds is None, (
+            f"+inf seconds must normalize to None, got {result.usage.audio_seconds!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 35: negative cost normalized to None ─────────────────────────────────
+
+async def test_usage_negative_cost_normalized_to_none() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": 1.5, "cost": -0.01}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.estimated_cost_usd is None, (
+            f"negative cost must normalize to None, got {result.usage.estimated_cost_usd!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 36: non-numeric seconds normalized to None ──────────────────────────
+
+async def test_usage_non_numeric_seconds_normalized_to_none() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello", "usage": {"seconds": "not_a_number", "cost": 0.001}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.usage is not None
+        assert result.usage.audio_seconds is None, (
+            f"non-numeric seconds must normalize to None, got {result.usage.audio_seconds!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 37: usage present on empty transcript ────────────────────────────────
+
+async def test_usage_present_on_empty_transcript() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "   ", "usage": {"seconds": 2.5, "cost": 0.0005}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.enabled is True
+        assert result.text is None
+        assert result.usage is not None, "usage must be present even for empty transcript"
+        assert result.usage.audio_seconds == 2.5
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 38: usage is None on HTTP error paths ────────────────────────────────
+
+async def test_usage_is_none_on_http_error() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(400)
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.enabled is False
+        assert result.usage is None, (
+            f"usage must be None on HTTP 400, got {result.usage!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
 # ── runner ────────────────────────────────────────────────────────────────────
 
 async def main_async() -> None:
@@ -549,11 +776,25 @@ async def main_async() -> None:
     await test_empty_language_absent_from_payload()
     await test_russian_transcript_returned_unchanged()
     await test_factory_passes_language_to_provider()
+    await test_stt_usage_info_dataclass_exists()
+    await test_usage_populated_on_success_with_usage_data()
+    await test_usage_audio_seconds_value_correct()
+    await test_usage_cost_value_correct()
+    await test_usage_none_when_no_usage_key()
+    await test_usage_none_when_empty_usage_dict()
+    await test_usage_zero_seconds_accepted()
+    await test_usage_negative_seconds_normalized_to_none()
+    await test_usage_nan_seconds_normalized_to_none()
+    await test_usage_inf_seconds_normalized_to_none()
+    await test_usage_negative_cost_normalized_to_none()
+    await test_usage_non_numeric_seconds_normalized_to_none()
+    await test_usage_present_on_empty_transcript()
+    await test_usage_is_none_on_http_error()
 
 
 def main() -> None:
     asyncio.run(main_async())
-    print("PASS: OpenRouter STT provider — all 24 tests")
+    print("PASS: OpenRouter STT provider — all 38 tests")
 
 
 if __name__ == "__main__":

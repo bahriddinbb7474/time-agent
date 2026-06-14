@@ -31,7 +31,8 @@ from app.services.capture_router_service import (
     CAPTURE_KIND_IGNORE,
     CaptureRouterService,
 )
-from app.services.stt_provider import DisabledSTTProvider, get_stt_provider
+from app.services.api_usage_service import ApiUsageService
+from app.services.stt_provider import DisabledSTTProvider, OpenRouterSTTProvider, get_stt_provider
 from app.services.voice_capture_safety import (
     downloaded_voice_temp_path,
     validate_voice_safety,
@@ -71,6 +72,40 @@ def build_expired_capture_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+async def _record_stt_usage_best_effort(
+    session,
+    result,
+    voice_duration: int,
+    settings,
+    status: str,
+) -> None:
+    audio_seconds = (
+        result.usage.audio_seconds
+        if result is not None
+        and result.usage is not None
+        and result.usage.audio_seconds is not None
+        else float(voice_duration)
+    )
+    cost = (
+        result.usage.estimated_cost_usd
+        if result is not None
+        and result.usage is not None
+        and result.usage.estimated_cost_usd is not None
+        else 0.0
+    )
+    try:
+        async with session.begin_nested():
+            await ApiUsageService(session).record_stt(
+                provider="openrouter",
+                model=settings.openrouter_stt_model,
+                audio_seconds=audio_seconds,
+                estimated_cost_usd=cost,
+                status=status,
+            )
+    except Exception:
+        log.warning("Failed to record STT usage", exc_info=True)
+
+
 @router.message(F.voice)
 async def capture_voice_message(
     message: Message,
@@ -99,13 +134,26 @@ async def capture_voice_message(
         await message.answer(safety.user_message or "Голос нельзя обработать.")
         return
 
+    voice_duration = message.voice.duration
+    stt_request_started = False
+    result = None
     try:
         async with downloaded_voice_temp_path(message) as audio_path:
+            stt_request_started = True
             result = await provider.transcribe_audio(audio_path)
     except Exception:
+        if stt_request_started and isinstance(provider, OpenRouterSTTProvider):
+            await _record_stt_usage_best_effort(
+                session, result, voice_duration, settings, "error"
+            )
         log.exception("Voice processing failed")
         await message.answer("Не удалось обработать голос. Отправь текстом.")
         return
+
+    if isinstance(provider, OpenRouterSTTProvider):
+        await _record_stt_usage_best_effort(
+            session, result, voice_duration, settings, "success"
+        )
 
     if not result.enabled or not result.text:
         await message.answer(result.user_message)

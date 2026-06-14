@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import logging
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -27,11 +28,28 @@ _MIME_TYPES: dict[str, str] = {
 }
 
 
+def _normalize_usage_float(raw) -> float | None:
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(v) or v < 0:
+        return None
+    return v
+
+
+@dataclass(slots=True, frozen=True)
+class STTUsageInfo:
+    audio_seconds: float | None = None
+    estimated_cost_usd: float | None = None
+
+
 @dataclass(slots=True, frozen=True)
 class STTResult:
     enabled: bool
     text: str | None
     user_message: str
+    usage: STTUsageInfo | None = None
 
 
 class STTProvider(Protocol):
@@ -121,23 +139,29 @@ class OpenRouterSTTProvider:
                     ) as resp:
                         if resp.status == 200:
                             data = await resp.json()
+                            raw_usage = data.get("usage", {})
+                            stt_usage = STTUsageInfo(
+                                audio_seconds=_normalize_usage_float(raw_usage.get("seconds")),
+                                estimated_cost_usd=_normalize_usage_float(raw_usage.get("cost")),
+                            )
+                            log.debug(
+                                "STT usage: seconds=%s cost=%s",
+                                stt_usage.audio_seconds,
+                                stt_usage.estimated_cost_usd,
+                            )
                             text = (data.get("text") or "").strip()
                             if not text:
                                 return STTResult(
                                     enabled=True,
                                     text=None,
                                     user_message="Голос принял, но не смог разобрать слова.",
+                                    usage=stt_usage,
                                 )
-                            usage = data.get("usage", {})
-                            log.debug(
-                                "STT usage: seconds=%.2f cost=%s",
-                                usage.get("seconds", 0.0),
-                                usage.get("cost", "?"),
-                            )
                             return STTResult(
                                 enabled=True,
                                 text=text,
                                 user_message="Голос расшифрован.",
+                                usage=stt_usage,
                             )
                         if resp.status in {400, 401, 403}:
                             await self._log_error_body(resp, fmt, len(audio_b64))
