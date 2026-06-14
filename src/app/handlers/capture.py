@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from aiogram import F, Router
@@ -36,6 +37,8 @@ from app.services.voice_capture_safety import (
     validate_voice_safety,
 )
 
+
+log = logging.getLogger(__name__)
 
 router = Router()
 
@@ -96,8 +99,13 @@ async def capture_voice_message(
         await message.answer(safety.user_message or "Голос нельзя обработать.")
         return
 
-    async with downloaded_voice_temp_path(message) as audio_path:
-        result = await provider.transcribe_audio(audio_path)
+    try:
+        async with downloaded_voice_temp_path(message) as audio_path:
+            result = await provider.transcribe_audio(audio_path)
+    except Exception:
+        log.exception("Voice processing failed")
+        await message.answer("Не удалось обработать голос. Отправь текстом.")
+        return
 
     if not result.enabled or not result.text:
         await message.answer(result.user_message)

@@ -406,6 +406,100 @@ async def test_voice_limits_reject_before_download() -> None:
         tmp.cleanup()
 
 
+async def test_voice_telegram_download_error_gives_safe_message() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+
+            class _FailingBot:
+                async def get_file(self, file_id: str):
+                    return FakeFile()
+
+                async def download_file(self, file_path: str, *, destination: Path):
+                    raise RuntimeError("Telegram download failed")
+
+            message.bot = _FailingBot()
+            settings = SimpleNamespace(stt_max_duration_sec=60, stt_max_file_mb=10)
+            await capture_voice_message(
+                message,
+                session,
+                settings=settings,
+                stt_provider=FakeSTTProvider(),
+            )
+            assert len(message.answers) == 1, (
+                f"expected 1 answer, got {len(message.answers)}"
+            )
+            assert message.answers[0][0] == "Не удалось обработать голос. Отправь текстом.", (
+                f"unexpected message: {message.answers[0][0]!r}"
+            )
+            result = await session.execute(select(CaptureDraftRecord))
+            assert list(result.scalars().all()) == [], "no draft must be created on download error"
+            assert await _count_tasks(session) == 0, "no task must be created on download error"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_voice_unexpected_provider_exception_gives_safe_message() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+
+            class _RaisingProvider:
+                async def transcribe_audio(self, audio_path: Path) -> STTResult:
+                    raise RuntimeError("unexpected provider bug")
+
+            settings = SimpleNamespace(stt_max_duration_sec=60, stt_max_file_mb=10)
+            await capture_voice_message(
+                message,
+                session,
+                settings=settings,
+                stt_provider=_RaisingProvider(),
+            )
+            assert len(message.answers) == 1, (
+                f"expected 1 answer, got {len(message.answers)}"
+            )
+            assert message.answers[0][0] == "Не удалось обработать голос. Отправь текстом.", (
+                f"unexpected message: {message.answers[0][0]!r}"
+            )
+            result = await session.execute(select(CaptureDraftRecord))
+            assert list(result.scalars().all()) == [], "no draft must be created on provider exception"
+            assert await _count_tasks(session) == 0, "no task must be created on provider exception"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_voice_cancelled_error_propagates() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+
+            class _CancellingProvider:
+                async def transcribe_audio(self, audio_path: Path) -> STTResult:
+                    raise asyncio.CancelledError()
+
+            settings = SimpleNamespace(stt_max_duration_sec=60, stt_max_file_mb=10)
+            cancelled_raised = False
+            try:
+                await capture_voice_message(
+                    message,
+                    session,
+                    settings=settings,
+                    stt_provider=_CancellingProvider(),
+                )
+            except asyncio.CancelledError:
+                cancelled_raised = True
+            assert cancelled_raised, "CancelledError must propagate, not be swallowed by handler"
+            assert len(message.answers) == 0, "no user message must be sent on CancelledError"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
 async def main_async() -> None:
     await test_draft_persists_and_restart_can_read_pending()
     await test_confirm_paths_create_items_and_mark_confirmed()
@@ -414,6 +508,9 @@ async def main_async() -> None:
     await test_disabled_voice_does_not_download_or_create_draft()
     await test_voice_fake_stt_creates_db_draft_without_task()
     await test_voice_limits_reject_before_download()
+    await test_voice_telegram_download_error_gives_safe_message()
+    await test_voice_unexpected_provider_exception_gives_safe_message()
+    await test_voice_cancelled_error_propagates()
 
 
 def main() -> None:
