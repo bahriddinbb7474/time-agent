@@ -150,9 +150,10 @@ async def capture_voice_message(
         await message.answer("Не удалось обработать голос. Отправь текстом.")
         return
 
-    if isinstance(provider, OpenRouterSTTProvider):
+    if isinstance(provider, OpenRouterSTTProvider) and result.request_made:
+        status = "success" if result.enabled else "error"
         await _record_stt_usage_best_effort(
-            session, result, voice_duration, settings, "success"
+            session, result, voice_duration, settings, status
         )
 
     if not result.enabled or not result.text:

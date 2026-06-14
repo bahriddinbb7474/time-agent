@@ -50,6 +50,7 @@ class STTResult:
     text: str | None
     user_message: str
     usage: STTUsageInfo | None = None
+    request_made: bool = False
 
 
 class STTProvider(Protocol):
@@ -156,12 +157,14 @@ class OpenRouterSTTProvider:
                                     text=None,
                                     user_message="Голос принял, но не смог разобрать слова.",
                                     usage=stt_usage,
+                                    request_made=True,
                                 )
                             return STTResult(
                                 enabled=True,
                                 text=text,
                                 user_message="Голос расшифрован.",
                                 usage=stt_usage,
+                                request_made=True,
                             )
                         if resp.status in {400, 401, 403}:
                             await self._log_error_body(resp, fmt, len(audio_b64))
@@ -169,6 +172,7 @@ class OpenRouterSTTProvider:
                                 enabled=False,
                                 text=None,
                                 user_message="Голос принял, расшифровка временно недоступна.",
+                                request_made=True,
                             )
                         if resp.status in _RETRYABLE_STATUSES:
                             last_exc = RuntimeError(f"HTTP {resp.status}")
@@ -184,6 +188,7 @@ class OpenRouterSTTProvider:
                                 enabled=False,
                                 text=None,
                                 user_message="Голос принял, расшифровка временно недоступна.",
+                                request_made=True,
                             )
             except asyncio.TimeoutError as exc:
                 last_exc = exc
@@ -205,6 +210,7 @@ class OpenRouterSTTProvider:
             enabled=False,
             text=None,
             user_message="Голос принял, расшифровка временно недоступна.",
+            request_made=True,
         )
 
     async def _log_error_body(self, resp, fmt: str, b64_len: int) -> None:

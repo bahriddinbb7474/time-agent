@@ -18,7 +18,9 @@ os.environ.setdefault("ALLOWED_TELEGRAM_ID", "123456789")
 
 import app.services.stt_provider as stt_mod
 from app.services.stt_provider import (
+    DisabledSTTProvider,
     OpenRouterSTTProvider,
+    STTResult,
     STTUsageInfo,
     _MAX_ATTEMPTS,
     get_stt_provider,
@@ -749,6 +751,189 @@ async def test_usage_is_none_on_http_error() -> None:
         tmp.cleanup()
 
 
+# ── Test 39: HTTP 200 + transcript → request_made=True ───────────────────────
+
+async def test_request_made_true_on_http_200_transcript() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello world", "usage": {"seconds": 1.2, "cost": 0.0001}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.request_made is True, (
+            f"HTTP 200 with transcript must set request_made=True, got {result.request_made!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 40: HTTP 200 + empty transcript → request_made=True ─────────────────
+
+async def test_request_made_true_on_http_200_empty_transcript() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "   ", "usage": {"seconds": 2.5, "cost": 0.0}})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.enabled is True
+        assert result.text is None
+        assert result.request_made is True, (
+            f"HTTP 200 with empty transcript must set request_made=True, got {result.request_made!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 41: HTTP 400 → request_made=True ────────────────────────────────────
+
+async def test_request_made_true_on_http_400() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(400)
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.enabled is False
+        assert result.request_made is True, (
+            f"HTTP 400 must set request_made=True, got {result.request_made!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 42: HTTP 401 and 403 → request_made=True ────────────────────────────
+
+async def test_request_made_true_on_http_401_403() -> None:
+    for status_code in (401, 403):
+        tmp, audio = _make_audio(".ogg")
+        try:
+            resp = _make_resp(status_code)
+            session = _make_session(resp)
+            with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+                result = await _provider().transcribe_audio(audio)
+            assert result.enabled is False
+            assert result.request_made is True, (
+                f"HTTP {status_code} must set request_made=True, got {result.request_made!r}"
+            )
+        finally:
+            tmp.cleanup()
+
+
+# ── Test 43: exhausted retryable (429×2) → request_made=True ─────────────────
+
+async def test_request_made_true_on_exhausted_retryable() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resps = [_make_resp(429) for _ in range(_MAX_ATTEMPTS)]
+        session = _make_session(*resps)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.enabled is False
+        assert result.request_made is True, (
+            f"Exhausted 429 retries must set request_made=True, got {result.request_made!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 44: exhausted timeout → request_made=True ───────────────────────────
+
+async def test_request_made_true_on_exhausted_timeout() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        timeouts = []
+        for _ in range(_MAX_ATTEMPTS):
+            r = MagicMock()
+            r.__aenter__ = AsyncMock(side_effect=asyncio.TimeoutError())
+            r.__aexit__ = AsyncMock(return_value=False)
+            timeouts.append(r)
+        session = _make_session(*timeouts)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.enabled is False
+        assert result.request_made is True, (
+            f"Exhausted timeouts must set request_made=True, got {result.request_made!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 45: exhausted connection error → request_made=True ──────────────────
+
+async def test_request_made_true_on_exhausted_connection_error() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        errors = []
+        for _ in range(_MAX_ATTEMPTS):
+            r = MagicMock()
+            r.__aenter__ = AsyncMock(side_effect=stt_mod.aiohttp.ServerConnectionError())
+            r.__aexit__ = AsyncMock(return_value=False)
+            errors.append(r)
+        session = _make_session(*errors)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider().transcribe_audio(audio)
+        assert result.enabled is False
+        assert result.request_made is True, (
+            f"Exhausted connection errors must set request_made=True, got {result.request_made!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 46: no API key → request_made=False (no HTTP call) ──────────────────
+
+async def test_request_made_false_no_api_key() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        with mock.patch.object(stt_mod.aiohttp, "ClientSession") as mock_cls:
+            result = await OpenRouterSTTProvider(api_key="").transcribe_audio(audio)
+        mock_cls.assert_not_called()
+        assert result.request_made is False, (
+            f"No API key path must leave request_made=False, got {result.request_made!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 47: unsupported format → request_made=False (no HTTP call) ──────────
+
+async def test_request_made_false_unsupported_format() -> None:
+    tmp, audio = _make_audio(".xyz")
+    try:
+        with mock.patch.object(stt_mod.aiohttp, "ClientSession") as mock_cls:
+            result = await _provider().transcribe_audio(audio)
+        mock_cls.assert_not_called()
+        assert result.request_made is False, (
+            f"Unsupported format path must leave request_made=False, got {result.request_made!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 48: DisabledSTTProvider → request_made=False ────────────────────────
+
+async def test_request_made_false_disabled_provider() -> None:
+    provider = DisabledSTTProvider()
+    result = await provider.transcribe_audio(Path("fake.ogg"))
+    assert result.request_made is False, (
+        f"DisabledSTTProvider must return request_made=False, got {result.request_made!r}"
+    )
+
+
+# ── Test 49: backward-compatible construction without field → False ────────────
+
+async def test_request_made_false_backward_compatible() -> None:
+    result_no_field = STTResult(enabled=True, text="hello", user_message="ok")
+    assert result_no_field.request_made is False, (
+        "STTResult constructed without request_made must default to False"
+    )
+    result_false = STTResult(enabled=False, text=None, user_message="err", request_made=False)
+    assert result_false.request_made is False
+    result_true = STTResult(enabled=True, text="hi", user_message="ok", request_made=True)
+    assert result_true.request_made is True
+
+
 # ── runner ────────────────────────────────────────────────────────────────────
 
 async def main_async() -> None:
@@ -790,11 +975,22 @@ async def main_async() -> None:
     await test_usage_non_numeric_seconds_normalized_to_none()
     await test_usage_present_on_empty_transcript()
     await test_usage_is_none_on_http_error()
+    await test_request_made_true_on_http_200_transcript()
+    await test_request_made_true_on_http_200_empty_transcript()
+    await test_request_made_true_on_http_400()
+    await test_request_made_true_on_http_401_403()
+    await test_request_made_true_on_exhausted_retryable()
+    await test_request_made_true_on_exhausted_timeout()
+    await test_request_made_true_on_exhausted_connection_error()
+    await test_request_made_false_no_api_key()
+    await test_request_made_false_unsupported_format()
+    await test_request_made_false_disabled_provider()
+    await test_request_made_false_backward_compatible()
 
 
 def main() -> None:
     asyncio.run(main_async())
-    print("PASS: OpenRouter STT provider — all 38 tests")
+    print("PASS: OpenRouter STT provider — all 49 tests")
 
 
 if __name__ == "__main__":

@@ -61,10 +61,20 @@ OPENROUTER_SETTINGS = SimpleNamespace(
 
 
 class FakeOpenRouterProvider(OpenRouterSTTProvider):
-    """OpenRouterSTTProvider subclass that returns a canned result without HTTP calls."""
-    def __init__(self, result: STTResult) -> None:
+    """OpenRouterSTTProvider subclass returning a canned result without HTTP calls.
+
+    Default request_made=True simulates a completed HTTP request.
+    Pass request_made=False to simulate early return without HTTP (e.g. no api key).
+    """
+    def __init__(self, result: STTResult, *, request_made: bool = True) -> None:
         super().__init__(api_key="sk-test", model="openai/whisper-large-v3-turbo")
-        self._fake_result = result
+        self._fake_result = STTResult(
+            enabled=result.enabled,
+            text=result.text,
+            user_message=result.user_message,
+            usage=result.usage,
+            request_made=request_made,
+        )
 
     async def transcribe_audio(self, audio_path: Path) -> STTResult:
         return self._fake_result
@@ -77,6 +87,15 @@ class RaisingOpenRouterProvider(OpenRouterSTTProvider):
 
     async def transcribe_audio(self, audio_path: Path) -> STTResult:
         raise RuntimeError("STT provider error")
+
+
+class CancellingOpenRouterProvider(OpenRouterSTTProvider):
+    """OpenRouterSTTProvider subclass that raises CancelledError during transcription."""
+    def __init__(self) -> None:
+        super().__init__(api_key="sk-test", model="openai/whisper-large-v3-turbo")
+
+    async def transcribe_audio(self, audio_path: Path) -> STTResult:
+        raise asyncio.CancelledError()
 
 
 async def _count_usage_rows(session) -> int:
@@ -372,6 +391,7 @@ async def test_disabled_voice_does_not_download_or_create_draft() -> None:
 
             result = await session.execute(select(CaptureDraftRecord))
             assert list(result.scalars().all()) == []
+            assert await _count_usage_rows(session) == 0, "disabled provider must not create usage rows"
     finally:
         await engine.dispose()
         tmp.cleanup()
@@ -899,6 +919,79 @@ async def test_openrouter_usage_recorded_on_empty_transcript() -> None:
         tmp.cleanup()
 
 
+async def test_openrouter_expected_error_result_creates_error_row() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=False,
+                text=None,
+                user_message="Голос принял, расшифровка временно недоступна.",
+            )
+            provider = FakeOpenRouterProvider(stt_result, request_made=True)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            assert await _count_usage_rows(session) == 1, (
+                "expected-error result (request_made=True, enabled=False) must create one usage row"
+            )
+            row = await _get_first_usage_row(session)
+            assert row is not None
+            assert row.status == "error", (
+                f"expected-error result must have status='error', got {row.status!r}"
+            )
+            result = await session.execute(select(CaptureDraftRecord))
+            assert list(result.scalars().all()) == [], "no draft must be created on provider error"
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_no_request_made_no_usage_row() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            stt_result = STTResult(
+                enabled=False,
+                text=None,
+                user_message="STT provider не настроен.",
+            )
+            provider = FakeOpenRouterProvider(stt_result, request_made=False)
+            await capture_voice_message(
+                message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+            )
+            assert await _count_usage_rows(session) == 0, (
+                "result with request_made=False must not create any usage row"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_openrouter_cancelled_error_zero_usage_rows() -> None:
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            message = FakeVoiceMessage()
+            provider = CancellingOpenRouterProvider()
+            cancelled_raised = False
+            try:
+                await capture_voice_message(
+                    message, session, settings=OPENROUTER_SETTINGS, stt_provider=provider,
+                )
+            except asyncio.CancelledError:
+                cancelled_raised = True
+            assert cancelled_raised, "CancelledError must propagate from OpenRouter provider"
+            assert await _count_usage_rows(session) == 0, (
+                "CancelledError must not create any usage rows"
+            )
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
 async def main_async() -> None:
     await test_draft_persists_and_restart_can_read_pending()
     await test_confirm_paths_create_items_and_mark_confirmed()
@@ -925,11 +1018,14 @@ async def main_async() -> None:
     await test_fake_provider_no_usage_recorded()
     await test_openrouter_usage_savepoint_isolation()
     await test_openrouter_usage_recorded_on_empty_transcript()
+    await test_openrouter_expected_error_result_creates_error_row()
+    await test_openrouter_no_request_made_no_usage_row()
+    await test_openrouter_cancelled_error_zero_usage_rows()
 
 
 def main() -> None:
     asyncio.run(main_async())
-    print("PASS: capture drafts — all 25 tests")
+    print("PASS: capture drafts — all 28 tests")
 
 
 if __name__ == "__main__":
