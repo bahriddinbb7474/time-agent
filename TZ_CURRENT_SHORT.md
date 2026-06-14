@@ -1,28 +1,22 @@
-# Time-Agent v1 Target
+# Time-Agent Current Short
 
-Time-Agent v1 is a Telegram-first Personal Mental Load Dispatcher.
+> Summary only.
+> Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v7_1.md`
 
-## Core Flow
+## Current State
 
-capture -> organize -> remind -> protect -> plan -> review
+- Stage 18.6-P: CLOSED / PRODUCTION PASS.
+- Production HEAD: `fd23d87`.
+- Documentation HEAD: `3e98bcb`.
+- Next stage: Stage 18.6-C0.
+- Then: Stage 18.6-C `/usage`, Stage 18.6-D hard limits, audits, Stage 19.
 
-## Target Behavior
+## Product Target
 
-- Telegram is the primary interface.
-- Owner-only access is mandatory.
-- Quick captures go into tasks or Later Inbox.
-- `/later` opens unprocessed captures.
-- `/boss` handles boss/critical priority flows.
-- `/focus` starts focused execution mode.
-- `/backlog` reviews unfinished and unscheduled work.
-- Prayer protected windows block or warn before scheduling.
-- Google Calendar is read-first; writes are policy-gated and owner-approved.
-- Evening planning reviews today, prepares tomorrow, and asks for approval.
-- Morning briefing presents the day plan and conflicts.
-- Family/relationship reminders are suggested, not silently created.
-- Health/Siyam/Quran state influences reminders and planning.
-- VPS deployment must support 24/7 operation, persistent data, logs, secrets, and restart recovery.
+Time-Agent is a Telegram-first Personal Mental Load Dispatcher / external memory assistant.
 
-## v1 Scope Marker
+Core flow:
 
-The final v1 should feel like a private dispatcher that captures mental load, protects non-negotiable priorities, schedules only after context checks, and keeps the owner in control of sensitive or external changes.
+`capture -> organize -> remind -> protect -> plan -> review`
+
+The v1 result should feel like a private dispatcher that captures mental load, protects prayer and other non-negotiable priorities, plans only after context checks, and keeps the owner in control of sensitive or external actions.

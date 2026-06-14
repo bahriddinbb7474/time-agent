@@ -1,5 +1,9 @@
 # Handoff Summary
 
+> Historical document.
+> Superseded by `docs/TZ_TIME_AGENT_FINAL_v7_1.md`.
+> Do not use this file for planning new stages.
+
 ## Project
 
 Time-Agent is a Telegram-first personal time and task assistant. It manages local tasks, protected time windows, prayer-aware scheduling, Google Calendar integration, Quran progress, basic Siyam/health context, family contact candidates, and persistent reminders.

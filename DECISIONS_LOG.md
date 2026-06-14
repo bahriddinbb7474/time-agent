@@ -1,5 +1,9 @@
 # Decisions Log
 
+> Historical document.
+> Superseded by `docs/TZ_TIME_AGENT_FINAL_v7_1.md`.
+> Do not use this file for planning new stages.
+
 ## Visible Architecture Decisions
 
 - Telegram-first interface: the application is an aiogram Telegram bot, started from `app.main`.

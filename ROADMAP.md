@@ -1,5 +1,9 @@
 # Roadmap to Time-Agent v1
 
+> Historical document.
+> Superseded by `docs/TZ_TIME_AGENT_FINAL_v7_1.md`.
+> Do not use this file for planning new stages.
+
 ## Stage Status
 
 - Stage 6 Stabilization Gate: done.

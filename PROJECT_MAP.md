@@ -1,8 +1,11 @@
 # Project Map
 
+> Summary only.
+> Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v7_1.md`
+
 ## Purpose
 
-Time-Agent is a Telegram bot for personal task and time management with context-aware scheduling: protected slots, sleep windows, prayer windows, Siyam/health context, reminders, and Google Calendar integration.
+Time-Agent is a Telegram bot for personal mental-load dispatching with context-aware scheduling: protected slots, sleep windows, prayer windows, Siyam/health context, reminders, capture drafts, and planning.
 
 ## Repository Structure
 
@@ -64,7 +67,7 @@ time-agent/
 ## Main Runtime Flow
 
 1. `app.main` loads config and logging.
-2. SQLite schema is ensured with SQLAlchemy `create_all()`.
+2. SQLite schema is updated through the project migration runner.
 3. Seed data is inserted if missing.
 4. APScheduler starts recurring jobs and recovers persistent alerts.
 5. Aiogram registers owner-only middleware, DB middleware, and routers.
@@ -89,4 +92,4 @@ time-agent/
 - `requirements.txt`: pinned runtime dependencies.
 - `Dockerfile`: runs `python -m app.main` with `PYTHONPATH=/app/src`.
 - `docker-compose.yml`: mounts logs and app data, exposes port `8085` for OAuth callback.
-- `.env.example`: present but currently empty.
+- `.env.example`: placeholder-only runtime configuration.

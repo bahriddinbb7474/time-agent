@@ -22,3 +22,6 @@ data/gcal_token.json
 
 # IDE
 .vscode/
+
+# Claude Code local settings; may contain local permissions or secrets
+.claude/settings.local.json

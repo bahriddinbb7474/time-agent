@@ -1,4 +1,6 @@
-> Superseded by [docs/TZ_TIME_AGENT_FINAL_v7_1.md](docs/TZ_TIME_AGENT_FINAL_v7_1.md)
+> Historical document.
+> Superseded by `docs/TZ_TIME_AGENT_FINAL_v7_1.md`.
+> Do not use this file for planning new stages.
 
 # TZ Time-Agent — Compact Reference (v6.2)
 

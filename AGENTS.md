@@ -148,6 +148,14 @@ Do not change code.
 
 ---
 
+## Canonical project plan
+
+Before planning or implementing a new project stage, read:
+
+`docs/TZ_TIME_AGENT_FINAL_v7_1.md`
+
+---
+
 ## Output Format
 
 После ANALYZE:
