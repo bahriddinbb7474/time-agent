@@ -1,3 +1,5 @@
+> Superseded by [docs/TZ_TIME_AGENT_FINAL_v7_1.md](docs/TZ_TIME_AGENT_FINAL_v7_1.md)
+
 # TZ Time-Agent — Compact Reference (v6.2)
 
 ## Цель проекта

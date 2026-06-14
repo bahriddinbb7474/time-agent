@@ -29,12 +29,17 @@ The product must reduce the owner's mental load rather than introduce additional
 * Real STT and LLM providers are connected only in their approved stages.
 * No real secrets may appear in code, git, logs, tests, or documentation.
 
+## Canonical project plan
+
+`docs/TZ_TIME_AGENT_FINAL_v7_1.md` — approved Time-Agent final plan (v7.1).
+Read it for stage scope, acceptance criteria, invariants, and Definition of Done.
+
 ## Source of truth
 
 Before working, read the relevant approved task and:
 
 ```text
-TZ_TIME_AGENT_FINAL.md
+docs/TZ_TIME_AGENT_FINAL_v7_1.md
 PROJECT_MAP.md
 PROJECT_STATUS.md
 AGENTS.md
