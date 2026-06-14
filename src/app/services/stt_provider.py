@@ -70,9 +70,12 @@ class FakeSTTProvider:
 
 
 class OpenRouterSTTProvider:
-    def __init__(self, api_key: str, model: str = _DEFAULT_MODEL) -> None:
+    def __init__(
+        self, api_key: str, model: str = _DEFAULT_MODEL, language: str = ""
+    ) -> None:
         self._api_key = api_key
         self._model = model
+        self._language = language
 
     async def transcribe_audio(self, audio_path: Path) -> STTResult:
         if not self._api_key:
@@ -94,13 +97,15 @@ class OpenRouterSTTProvider:
 
         audio_b64 = base64.b64encode(audio_path.read_bytes()).decode("ascii")
         fmt = suffix.lstrip(".")  # ".ogg" → "ogg"
-        payload = {
+        payload: dict = {
             "model": self._model,
             "input_audio": {
                 "data": audio_b64,
                 "format": fmt,
             },
         }
+        if self._language:
+            payload["language"] = self._language
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
@@ -227,7 +232,8 @@ def get_stt_provider(settings) -> STTProvider:
     if provider == "openrouter":
         api_key = getattr(settings, "openrouter_api_key", "")
         model = getattr(settings, "openrouter_stt_model", _DEFAULT_MODEL)
-        return OpenRouterSTTProvider(api_key=api_key, model=model)
+        language = getattr(settings, "openrouter_stt_language", "")
+        return OpenRouterSTTProvider(api_key=api_key, model=model, language=language)
     if provider == "groq":
         return DisabledSTTProvider(
             user_message="STT provider пока не подключён."

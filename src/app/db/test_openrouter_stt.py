@@ -71,8 +71,12 @@ def _make_audio(suffix: str = ".ogg"):
     return tmp, p
 
 
-def _provider(key: str = "sk-test", model: str = "openai/whisper-large-v3"):
-    return OpenRouterSTTProvider(api_key=key, model=model)
+def _provider(
+    key: str = "sk-test",
+    model: str = "openai/whisper-large-v3",
+    language: str = "",
+):
+    return OpenRouterSTTProvider(api_key=key, model=model, language=language)
 
 
 # ── Test 1: successful OGG transcript ─────────────────────────────────────────
@@ -432,6 +436,76 @@ async def test_key_and_base64_not_in_logs() -> None:
         tmp.cleanup()
 
 
+# ── Test 21: language=ru is included in payload ───────────────────────────────
+
+async def test_language_ru_included_in_payload() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello"})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            await _provider(language="ru").transcribe_audio(audio)
+        _, kw = session.post.call_args
+        payload = kw["json"]
+        assert payload.get("language") == "ru", (
+            f"'language' must be 'ru' in payload, got {payload.get('language')!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 22: empty language is absent from payload ────────────────────────────
+
+async def test_empty_language_absent_from_payload() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        resp = _make_resp(200, {"text": "hello"})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            await _provider(language="").transcribe_audio(audio)
+        _, kw = session.post.call_args
+        payload = kw["json"]
+        assert "language" not in payload, (
+            "language key must be absent from payload when not configured"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 23: Russian transcript returned without translation or modification ───
+
+async def test_russian_transcript_returned_unchanged() -> None:
+    tmp, audio = _make_audio(".ogg")
+    try:
+        ru_text = "Позвонить маме сегодня вечером"
+        resp = _make_resp(200, {"text": ru_text})
+        session = _make_session(resp)
+        with _patch_session(session), mock.patch.object(asyncio, "sleep", AsyncMock()):
+            result = await _provider(language="ru").transcribe_audio(audio)
+        assert result.enabled is True
+        assert result.text == ru_text, (
+            f"Russian text must be returned verbatim, got {result.text!r}"
+        )
+    finally:
+        tmp.cleanup()
+
+
+# ── Test 24: factory passes language to provider ──────────────────────────────
+
+async def test_factory_passes_language_to_provider() -> None:
+    settings = SimpleNamespace(
+        stt_provider="openrouter",
+        openrouter_api_key="sk-test",
+        openrouter_stt_model="openai/whisper-large-v3",
+        openrouter_stt_language="ru",
+    )
+    provider = get_stt_provider(settings)
+    assert isinstance(provider, OpenRouterSTTProvider)
+    assert provider._language == "ru", (
+        f"factory must pass language='ru' to provider, got {provider._language!r}"
+    )
+
+
 # ── Test 20: normal successful transcript not broken after fix ────────────────
 
 async def test_success_not_broken_after_fix() -> None:
@@ -471,11 +545,15 @@ async def main_async() -> None:
     await test_http_400_error_body_safely_logged()
     await test_key_and_base64_not_in_logs()
     await test_success_not_broken_after_fix()
+    await test_language_ru_included_in_payload()
+    await test_empty_language_absent_from_payload()
+    await test_russian_transcript_returned_unchanged()
+    await test_factory_passes_language_to_provider()
 
 
 def main() -> None:
     asyncio.run(main_async())
-    print("PASS: OpenRouter STT provider — all 20 tests")
+    print("PASS: OpenRouter STT provider — all 24 tests")
 
 
 if __name__ == "__main__":

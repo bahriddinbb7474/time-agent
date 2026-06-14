@@ -18,6 +18,7 @@ class Config:
     stt_max_file_mb: int
     openrouter_api_key: str
     openrouter_stt_model: str
+    openrouter_stt_language: str
 
 
 def load_config() -> Config:
@@ -44,6 +45,7 @@ def load_config() -> Config:
     openrouter_stt_model = (
         os.getenv("OPENROUTER_STT_MODEL", "").strip() or "openai/whisper-large-v3"
     )
+    openrouter_stt_language = os.getenv("OPENROUTER_STT_LANGUAGE", "").strip()
 
     return Config(
         bot_token=token,
@@ -57,4 +59,5 @@ def load_config() -> Config:
         stt_max_file_mb=stt_max_file_mb,
         openrouter_api_key=openrouter_api_key,
         openrouter_stt_model=openrouter_stt_model,
+        openrouter_stt_language=openrouter_stt_language,
     )
