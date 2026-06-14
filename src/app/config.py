@@ -16,6 +16,8 @@ class Config:
     llm_daily_limit: int
     stt_max_duration_sec: int
     stt_max_file_mb: int
+    openrouter_api_key: str
+    openrouter_stt_model: str
 
 
 def load_config() -> Config:
@@ -38,6 +40,10 @@ def load_config() -> Config:
     llm_daily_limit = int(os.getenv("LLM_DAILY_LIMIT", "0").strip() or "0")
     stt_max_duration_sec = int(os.getenv("STT_MAX_DURATION_SEC", "60").strip() or "60")
     stt_max_file_mb = int(os.getenv("STT_MAX_FILE_MB", "10").strip() or "10")
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    openrouter_stt_model = (
+        os.getenv("OPENROUTER_STT_MODEL", "").strip() or "openai/whisper-large-v3"
+    )
 
     return Config(
         bot_token=token,
@@ -49,4 +55,6 @@ def load_config() -> Config:
         llm_daily_limit=llm_daily_limit,
         stt_max_duration_sec=stt_max_duration_sec,
         stt_max_file_mb=stt_max_file_mb,
+        openrouter_api_key=openrouter_api_key,
+        openrouter_stt_model=openrouter_stt_model,
     )
