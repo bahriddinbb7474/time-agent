@@ -21,6 +21,7 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY ./src /app/src
+COPY --chown=10001:10001 ./migrations /app/migrations
 ENV PYTHONPATH=/app/src
 
 USER appuser
