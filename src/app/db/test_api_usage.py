@@ -452,6 +452,153 @@ async def test_unknown_service_type_rejected():
     print("PASS: test_unknown_service_type_rejected")
 
 
+# ─── Non-finite value tests (Stage 18.6-A1) ──────────────────────────────────
+
+
+async def test_nan_audio_seconds_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", audio_seconds=float("nan"),
+        )
+    )
+    print("PASS: test_nan_audio_seconds_rejected")
+
+
+async def test_inf_audio_seconds_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", audio_seconds=float("inf"),
+        )
+    )
+    print("PASS: test_inf_audio_seconds_rejected")
+
+
+async def test_neg_inf_audio_seconds_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", audio_seconds=float("-inf"),
+        )
+    )
+    print("PASS: test_neg_inf_audio_seconds_rejected")
+
+
+async def test_finite_positive_audio_seconds_accepted():
+    svc = ApiUsageService(_mock_session())
+    await svc.record(
+        provider="openrouter", service_type="stt",
+        model="openai/whisper-large-v3", audio_seconds=3.14,
+    )
+    print("PASS: test_finite_positive_audio_seconds_accepted")
+
+
+async def test_zero_audio_seconds_accepted():
+    svc = ApiUsageService(_mock_session())
+    await svc.record(
+        provider="openrouter", service_type="stt",
+        model="openai/whisper-large-v3", audio_seconds=0.0,
+    )
+    print("PASS: test_zero_audio_seconds_accepted")
+
+
+async def test_nan_estimated_cost_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", estimated_cost_usd=float("nan"),
+        )
+    )
+    print("PASS: test_nan_estimated_cost_rejected")
+
+
+async def test_inf_estimated_cost_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", estimated_cost_usd=float("inf"),
+        )
+    )
+    print("PASS: test_inf_estimated_cost_rejected")
+
+
+async def test_neg_inf_estimated_cost_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", estimated_cost_usd=float("-inf"),
+        )
+    )
+    print("PASS: test_neg_inf_estimated_cost_rejected")
+
+
+async def test_finite_positive_estimated_cost_accepted():
+    svc = ApiUsageService(_mock_session())
+    await svc.record(
+        provider="openrouter", service_type="stt",
+        model="openai/whisper-large-v3", estimated_cost_usd=0.0001,
+    )
+    print("PASS: test_finite_positive_estimated_cost_accepted")
+
+
+async def test_zero_estimated_cost_accepted():
+    svc = ApiUsageService(_mock_session())
+    await svc.record(
+        provider="openrouter", service_type="stt",
+        model="openai/whisper-large-v3", estimated_cost_usd=0.0,
+    )
+    print("PASS: test_zero_estimated_cost_accepted")
+
+
+async def test_non_finite_rejected_no_db_record():
+    """Non-finite values that fail validation must not write any row to DB."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        non_finite = [float("nan"), float("inf"), float("-inf")]
+        async with maker() as session:
+            svc = ApiUsageService(session)
+            for bad in non_finite:
+                try:
+                    await svc.record(
+                        provider="openrouter", service_type="stt",
+                        model="openai/whisper-large-v3", audio_seconds=bad,
+                    )
+                except ApiUsageValidationError:
+                    pass
+                try:
+                    await svc.record(
+                        provider="openrouter", service_type="stt",
+                        model="openai/whisper-large-v3", estimated_cost_usd=bad,
+                    )
+                except ApiUsageValidationError:
+                    pass
+            await session.commit()
+
+        await engine.dispose()
+        engine = None
+
+        conn = sqlite3.connect(db_path)
+        try:
+            count = conn.execute("SELECT COUNT(*) FROM api_usage").fetchone()[0]
+            assert count == 0, f"expected 0 rows after all rejections, got {count}"
+        finally:
+            conn.close()
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_non_finite_rejected_no_db_record")
+
+
 # ─── Daily aggregation test ────────────────────────────────────────────────────
 
 
@@ -545,6 +692,18 @@ ASYNC_TESTS = [
     test_empty_model_rejected,
     test_unknown_status_rejected,
     test_unknown_service_type_rejected,
+    # Stage 18.6-A1: non-finite value tests
+    test_nan_audio_seconds_rejected,
+    test_inf_audio_seconds_rejected,
+    test_neg_inf_audio_seconds_rejected,
+    test_finite_positive_audio_seconds_accepted,
+    test_zero_audio_seconds_accepted,
+    test_nan_estimated_cost_rejected,
+    test_inf_estimated_cost_rejected,
+    test_neg_inf_estimated_cost_rejected,
+    test_finite_positive_estimated_cost_accepted,
+    test_zero_estimated_cost_accepted,
+    test_non_finite_rejected_no_db_record,
     test_daily_aggregation,
 ]
 

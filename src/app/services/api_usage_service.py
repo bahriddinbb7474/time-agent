@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,13 +102,13 @@ class ApiUsageService:
             raise ApiUsageValidationError(
                 f"request_count must be >= 1, got {request_count}"
             )
-        if audio_seconds < 0:
+        if not math.isfinite(audio_seconds) or audio_seconds < 0:
             raise ApiUsageValidationError(
-                f"audio_seconds must be >= 0, got {audio_seconds}"
+                f"audio_seconds must be finite and >= 0, got {audio_seconds}"
             )
-        if estimated_cost_usd < 0:
+        if not math.isfinite(estimated_cost_usd) or estimated_cost_usd < 0:
             raise ApiUsageValidationError(
-                f"estimated_cost_usd must be >= 0, got {estimated_cost_usd}"
+                f"estimated_cost_usd must be finite and >= 0, got {estimated_cost_usd}"
             )
         if status not in _ALLOWED_STATUSES:
             raise ApiUsageValidationError(
