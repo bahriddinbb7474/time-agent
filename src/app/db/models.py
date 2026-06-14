@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -480,3 +481,20 @@ class DailyHealthContext(Base):
 Index("ix_oauth_states_user_state", OAuthState.user_id, OAuthState.state)
 
 
+class ApiUsageRecord(Base):
+    __tablename__ = "api_usage"
+    __table_args__ = (
+        Index("ix_api_usage_date_service", "usage_date", "service_type"),
+        Index("ix_api_usage_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    service_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    audio_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="success")
