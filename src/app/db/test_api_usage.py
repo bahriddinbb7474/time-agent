@@ -70,6 +70,7 @@ def test_migration_creates_table():
             expected = {
                 "id", "created_at", "usage_date", "provider", "service_type",
                 "model", "request_count", "audio_seconds", "estimated_cost_usd", "status",
+                "input_tokens", "output_tokens",
             }
             assert cols == expected, f"unexpected columns: {cols}"
         finally:
@@ -155,6 +156,149 @@ def test_schema_no_private_fields():
     finally:
         tmp.cleanup()
     print("PASS: test_schema_no_private_fields")
+
+
+# ─── Stage 18.6-C0: pre-token DB helper and migration tests ──────────────────
+
+
+def _create_pre_token_db():
+    """DB in the state before 20260615_1000_add_token_usage migration."""
+    tmp = tempfile.TemporaryDirectory(prefix="time_agent_pre_token_")
+    db_path = Path(tmp.name) / "pre_token.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "CREATE TABLE schema_migrations "
+            "(version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE api_usage (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at         DATETIME NOT NULL,
+                usage_date         DATE NOT NULL,
+                provider           VARCHAR(32) NOT NULL,
+                service_type       VARCHAR(16) NOT NULL,
+                model              VARCHAR(128) NOT NULL,
+                request_count      INTEGER NOT NULL DEFAULT 1,
+                audio_seconds      REAL NOT NULL DEFAULT 0.0,
+                estimated_cost_usd REAL NOT NULL DEFAULT 0.0,
+                status             VARCHAR(24) NOT NULL DEFAULT 'success'
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO api_usage "
+            "(created_at, usage_date, provider, service_type, model, "
+            "audio_seconds, estimated_cost_usd, status) VALUES "
+            "(datetime('now'), date('now'), 'openrouter', 'stt', "
+            "'openai/whisper-large-v3', 5.5, 0.00015, 'success')"
+        )
+        for v in (
+            "20260101_0000_baseline_pre_stage14",
+            "20260609_1300_add_daily_plan_lifecycle",
+            "20260612_0300_add_capture_drafts",
+            "20260614_2000_add_api_usage",
+        ):
+            conn.execute(
+                "INSERT INTO schema_migrations (version, applied_at) "
+                "VALUES (?, datetime('now'))",
+                (v,),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return db_path, tmp
+
+
+def test_migration_token_columns_added():
+    """Clean-install DB includes input_tokens and output_tokens."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(api_usage)").fetchall()}
+            assert "input_tokens" in cols, f"input_tokens missing; cols: {cols}"
+            assert "output_tokens" in cols, f"output_tokens missing; cols: {cols}"
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_migration_token_columns_added")
+
+
+def test_migration_token_column_defaults():
+    """New token columns are NOT NULL with default 0."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            # PRAGMA table_info: cid, name, type, notnull, dflt_value, pk
+            info = {
+                row[1]: row
+                for row in conn.execute("PRAGMA table_info(api_usage)").fetchall()
+            }
+            for col_name in ("input_tokens", "output_tokens"):
+                row = info[col_name]
+                assert row[3] == 1, (
+                    f"{col_name} must be NOT NULL (notnull=1), got {row[3]}"
+                )
+                assert row[4] == "0", (
+                    f"{col_name} default must be '0', got {row[4]!r}"
+                )
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_migration_token_column_defaults")
+
+
+def test_migration_upgrade_preserves_existing_row():
+    """Upgrading old DB: existing STT row keeps data; new columns default to 0."""
+    db_path, tmp = _create_pre_token_db()
+    try:
+        run_migrations(db_path)
+        conn = sqlite3.connect(db_path)
+        try:
+            assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            rows = conn.execute(
+                "SELECT provider, service_type, model, audio_seconds, "
+                "estimated_cost_usd, status, input_tokens, output_tokens "
+                "FROM api_usage"
+            ).fetchall()
+            assert len(rows) == 1, f"expected 1 row after upgrade, got {len(rows)}"
+            r = rows[0]
+            assert r[0] == "openrouter"
+            assert r[1] == "stt"
+            assert r[2] == "openai/whisper-large-v3"
+            assert abs(r[3] - 5.5) < 1e-9, f"audio_seconds changed: {r[3]}"
+            assert abs(r[4] - 0.00015) < 1e-9, f"cost changed: {r[4]}"
+            assert r[5] == "success"
+            assert r[6] == 0, f"input_tokens must be 0 after upgrade, got {r[6]}"
+            assert r[7] == 0, f"output_tokens must be 0 after upgrade, got {r[7]}"
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_migration_upgrade_preserves_existing_row")
+
+
+def test_migration_token_version_recorded():
+    """Token migration version appears in schema_migrations."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT version FROM schema_migrations WHERE version = ?",
+                ("20260615_1000_add_token_usage",),
+            ).fetchall()
+            assert len(rows) == 1, f"expected 1 version row, got {len(rows)}"
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_migration_token_version_recorded")
 
 
 # ─── ORM / service tests (async) ──────────────────────────────────────────────
@@ -664,6 +808,240 @@ async def test_daily_aggregation():
     print("PASS: test_daily_aggregation")
 
 
+# ─── Stage 18.6-C0: token count validation tests ─────────────────────────────
+
+
+async def test_token_count_zero_accepted():
+    svc = ApiUsageService(_mock_session())
+    await svc.record(
+        provider="openrouter", service_type="stt",
+        model="openai/whisper-large-v3", input_tokens=0, output_tokens=0,
+    )
+    print("PASS: test_token_count_zero_accepted")
+
+
+async def test_token_count_positive_accepted():
+    svc = ApiUsageService(_mock_session())
+    await svc.record(
+        provider="openrouter", service_type="llm",
+        model="openai/gpt-4o-mini", input_tokens=100, output_tokens=50,
+    )
+    print("PASS: test_token_count_positive_accepted")
+
+
+async def test_token_count_large_positive_accepted():
+    svc = ApiUsageService(_mock_session())
+    await svc.record(
+        provider="openrouter", service_type="llm",
+        model="openai/gpt-4o", input_tokens=1_000_000, output_tokens=500_000,
+    )
+    print("PASS: test_token_count_large_positive_accepted")
+
+
+async def test_input_tokens_negative_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", input_tokens=-1,
+        )
+    )
+    print("PASS: test_input_tokens_negative_rejected")
+
+
+async def test_output_tokens_negative_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", output_tokens=-1,
+        )
+    )
+    print("PASS: test_output_tokens_negative_rejected")
+
+
+async def test_input_tokens_bool_true_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", input_tokens=True,
+        )
+    )
+    print("PASS: test_input_tokens_bool_true_rejected")
+
+
+async def test_input_tokens_bool_false_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", input_tokens=False,
+        )
+    )
+    print("PASS: test_input_tokens_bool_false_rejected")
+
+
+async def test_input_tokens_float_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", input_tokens=1.0,
+        )
+    )
+    print("PASS: test_input_tokens_float_rejected")
+
+
+async def test_input_tokens_string_rejected():
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3", input_tokens="1",
+        )
+    )
+    print("PASS: test_input_tokens_string_rejected")
+
+
+async def test_input_tokens_none_defaults_zero():
+    svc = ApiUsageService(_mock_session())
+    row = await svc.record(
+        provider="openrouter", service_type="stt",
+        model="openai/whisper-large-v3", input_tokens=None,
+    )
+    assert row.input_tokens == 0, f"expected input_tokens=0, got {row.input_tokens}"
+    print("PASS: test_input_tokens_none_defaults_zero")
+
+
+async def test_token_validation_error_no_row():
+    """Validation error on tokens must not create any DB row."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        async with maker() as session:
+            svc = ApiUsageService(session)
+            for bad_input, bad_output in [(-5, 0), (0, True), (1.0, 0), (0, "2")]:
+                try:
+                    await svc.record(
+                        provider="openrouter", service_type="stt",
+                        model="openai/whisper-large-v3",
+                        input_tokens=bad_input, output_tokens=bad_output,
+                    )
+                except ApiUsageValidationError:
+                    pass
+            await session.commit()
+
+        await engine.dispose()
+        engine = None
+
+        conn = sqlite3.connect(db_path)
+        try:
+            count = conn.execute("SELECT COUNT(*) FROM api_usage").fetchone()[0]
+            assert count == 0, f"expected 0 rows after token errors, got {count}"
+        finally:
+            conn.close()
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_token_validation_error_no_row")
+
+
+async def test_token_values_saved_correctly():
+    """LLM row with token values persists correctly to DB."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        async with maker() as session:
+            svc = ApiUsageService(session)
+            row = await svc.record(
+                provider="openrouter",
+                service_type="llm",
+                model="openai/gpt-4o-mini",
+                input_tokens=1024,
+                output_tokens=256,
+                estimated_cost_usd=0.0005,
+            )
+            await session.commit()
+
+        assert row.input_tokens == 1024
+        assert row.output_tokens == 256
+        assert row.audio_seconds == 0.0
+        assert row.service_type == "llm"
+
+        await engine.dispose()
+        engine = None
+
+        conn = sqlite3.connect(db_path)
+        try:
+            r = conn.execute(
+                "SELECT input_tokens, output_tokens FROM api_usage WHERE id = ?",
+                (row.id,),
+            ).fetchone()
+            assert r is not None
+            assert r[0] == 1024, f"expected input_tokens=1024, got {r[0]}"
+            assert r[1] == 256, f"expected output_tokens=256, got {r[1]}"
+        finally:
+            conn.close()
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_token_values_saved_correctly")
+
+
+# ─── Stage 18.6-C0: STT regression tests ─────────────────────────────────────
+
+
+async def test_stt_record_has_zero_input_tokens():
+    """record_stt() always produces input_tokens=0."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        async with maker() as session:
+            svc = ApiUsageService(session)
+            row = await svc.record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                audio_seconds=3.0,
+                status="success",
+            )
+            await session.commit()
+        assert row.input_tokens == 0, f"STT input_tokens must be 0, got {row.input_tokens}"
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_stt_record_has_zero_input_tokens")
+
+
+async def test_stt_record_has_zero_output_tokens():
+    """record_stt() always produces output_tokens=0 regardless of status."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        async with maker() as session:
+            svc = ApiUsageService(session)
+            row = await svc.record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                audio_seconds=4.5,
+                status="error",
+            )
+            await session.commit()
+        assert row.output_tokens == 0, f"STT output_tokens must be 0, got {row.output_tokens}"
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_stt_record_has_zero_output_tokens")
+
+
 # ─── runner ───────────────────────────────────────────────────────────────────
 
 
@@ -674,6 +1052,11 @@ SYNC_TESTS = [
     test_migration_idempotent,
     test_migration_preserves_existing_tables,
     test_schema_no_private_fields,
+    # Stage 18.6-C0: token fields
+    test_migration_token_columns_added,
+    test_migration_token_column_defaults,
+    test_migration_upgrade_preserves_existing_row,
+    test_migration_token_version_recorded,
 ]
 
 ASYNC_TESTS = [
@@ -705,6 +1088,22 @@ ASYNC_TESTS = [
     test_zero_estimated_cost_accepted,
     test_non_finite_rejected_no_db_record,
     test_daily_aggregation,
+    # Stage 18.6-C0: token count validation
+    test_token_count_zero_accepted,
+    test_token_count_positive_accepted,
+    test_token_count_large_positive_accepted,
+    test_input_tokens_negative_rejected,
+    test_output_tokens_negative_rejected,
+    test_input_tokens_bool_true_rejected,
+    test_input_tokens_bool_false_rejected,
+    test_input_tokens_float_rejected,
+    test_input_tokens_string_rejected,
+    test_input_tokens_none_defaults_zero,
+    test_token_validation_error_no_row,
+    test_token_values_saved_correctly,
+    # Stage 18.6-C0: STT regression
+    test_stt_record_has_zero_input_tokens,
+    test_stt_record_has_zero_output_tokens,
 ]
 
 

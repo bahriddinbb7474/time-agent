@@ -498,3 +498,5 @@ class ApiUsageRecord(Base):
     audio_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     estimated_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="success")
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

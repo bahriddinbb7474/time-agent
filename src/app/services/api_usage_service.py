@@ -18,6 +18,22 @@ class ApiUsageValidationError(ValueError):
     pass
 
 
+def _validate_token_count(name: str, value: object) -> int:
+    """Return a validated non-negative token count; None converts to 0.
+
+    Accepts only plain int (not bool, not float, not str). None maps to 0.
+    """
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ApiUsageValidationError(
+            f"{name} must be a non-negative integer (got {type(value).__name__})"
+        )
+    if value < 0:
+        raise ApiUsageValidationError(f"{name} must be >= 0, got {value}")
+    return value
+
+
 class ApiUsageService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -32,8 +48,12 @@ class ApiUsageService:
         audio_seconds: float = 0.0,
         estimated_cost_usd: float = 0.0,
         status: str = "success",
+        input_tokens: int | None = 0,
+        output_tokens: int | None = 0,
         occurred_at: datetime | None = None,
     ) -> ApiUsageRecord:
+        input_tok = _validate_token_count("input_tokens", input_tokens)
+        output_tok = _validate_token_count("output_tokens", output_tokens)
         self._validate(
             provider=provider,
             service_type=service_type,
@@ -54,6 +74,8 @@ class ApiUsageService:
             audio_seconds=audio_seconds,
             estimated_cost_usd=estimated_cost_usd,
             status=status,
+            input_tokens=input_tok,
+            output_tokens=output_tok,
         )
         self._session.add(entry)
         await self._session.flush()
@@ -76,6 +98,8 @@ class ApiUsageService:
             audio_seconds=audio_seconds,
             estimated_cost_usd=estimated_cost_usd,
             status=status,
+            input_tokens=0,
+            output_tokens=0,
             occurred_at=occurred_at,
         )
 
