@@ -190,7 +190,7 @@ class ApiUsageService:
             ).label("error_count"),
             func.sum(
                 case(
-                    (ApiUsageRecord.status == "limit_exceeded", ApiUsageRecord.request_count),
+                    (ApiUsageRecord.status == "limit_exceeded", 1),
                     else_=0,
                 )
             ).label("limit_exceeded_count"),

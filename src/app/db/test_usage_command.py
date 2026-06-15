@@ -838,9 +838,9 @@ async def test_limit_exceeded_shown_separately_not_double_counted():
     finally:
         tmp.cleanup()
 
-    assert s.limit_exceeded_count == 0, (
-        f"limit_exceeded_count sums request_count for limit_exceeded rows; "
-        f"RC=0 row contributes 0, got {s.limit_exceeded_count}"
+    assert s.limit_exceeded_count == 1, (
+        f"limit_exceeded_count must count limit_exceeded rows regardless of RC; "
+        f"expected 1, got {s.limit_exceeded_count}"
     )
     assert s.no_request_count == 1
     assert s.provider_request_count == 1
@@ -914,7 +914,7 @@ async def test_format_shows_bez_vyzova_provider():
 
     text = _format_usage_message(s)
     assert "Без вызова provider: 1" in text, f"expected 'Без вызова provider: 1' in:\n{text}"
-    assert "Hard-limit: 0" in text
+    assert "Hard-limit: 1" in text, f"expected 'Hard-limit: 1' in:\n{text}"
     print("PASS: test_format_shows_bez_vyzova_provider")
 
 
@@ -935,6 +935,100 @@ async def test_format_provider_request_label_not_just_zaprosы():
     assert "Запросы к provider:" in text
     assert "Ошибки provider:" in text
     print("PASS: test_format_provider_request_label_not_just_zaprosы")
+
+
+# ─── Hard-limit count tests ───────────────────────────────────────────────────
+
+
+async def test_single_hard_limit_event_with_rc_zero():
+    """Single limit_exceeded row with RC=0 → limit_exceeded_count=1."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert s.limit_exceeded_count == 1, f"expected 1, got {s.limit_exceeded_count}"
+    assert s.no_request_count == 1
+    assert s.provider_request_count == 0
+    assert s.success_count == 0
+    assert s.error_count == 0
+    print("PASS: test_single_hard_limit_event_with_rc_zero")
+
+
+async def test_multiple_hard_limit_events_counted():
+    """Multiple limit_exceeded rows with RC=0 are all counted."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert s.limit_exceeded_count == 3, f"expected 3, got {s.limit_exceeded_count}"
+    assert s.no_request_count == 3
+    assert s.total_rows == 3
+    print("PASS: test_multiple_hard_limit_events_counted")
+
+
+async def test_mixed_scenario_all_categories():
+    """Mixed rows: success/RC=1, error/RC=1, limit_exceeded/RC=0, error/RC=0."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(session, usage_date=TODAY, status="success", request_count=1)
+            await _insert_row(session, usage_date=TODAY, status="error", request_count=1)
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+            await _insert_row(session, usage_date=TODAY, status="error", request_count=0)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert s.total_rows == 4
+    assert s.provider_request_count == 2, f"expected 2, got {s.provider_request_count}"
+    assert s.no_request_count == 2, f"expected 2, got {s.no_request_count}"
+    assert s.success_count == 1
+    assert s.error_count == 1  # only the RC=1 error row
+    assert s.limit_exceeded_count == 1, f"expected 1, got {s.limit_exceeded_count}"
+    print("PASS: test_mixed_scenario_all_categories")
+
+
+def test_format_hard_limit_nonzero_shown():
+    """Format shows non-zero hard-limit count correctly."""
+    s = DailyUsageSummary(
+        usage_date=date(2026, 6, 15),
+        total_rows=3,
+        request_count=1,
+        provider_request_count=1,
+        no_request_count=2,
+        success_count=1,
+        error_count=0,
+        limit_exceeded_count=2,
+        stt_request_count=1,
+        stt_audio_seconds=5.0,
+        llm_request_count=0,
+        llm_input_tokens=0,
+        llm_output_tokens=0,
+        estimated_cost_usd=0.0001,
+    )
+    text = _format_usage_message(s)
+    assert "🛑 Hard-limit: 2" in text, f"expected '🛑 Hard-limit: 2' in:\n{text}"
+    assert "⚪ Без вызова provider: 2" in text
+    print("PASS: test_format_hard_limit_nonzero_shown")
 
 
 # ─── Tashkent usage_date tests ────────────────────────────────────────────────
@@ -1030,6 +1124,7 @@ SYNC_TESTS = [
     test_format_audio_comma_separator,
     test_format_message_length_reasonable,
     test_now_tz_returns_tashkent_date,
+    test_format_hard_limit_nonzero_shown,
 ]
 
 ASYNC_TESTS = [
@@ -1060,6 +1155,10 @@ ASYNC_TESTS = [
     test_mixed_rows_no_request_and_provider,
     test_format_shows_bez_vyzova_provider,
     test_format_provider_request_label_not_just_zaprosы,
+    # Hard-limit count
+    test_single_hard_limit_event_with_rc_zero,
+    test_multiple_hard_limit_events_counted,
+    test_mixed_scenario_all_categories,
     # Tashkent usage_date boundary
     test_tashkent_midnight_boundary_before,
     test_tashkent_midnight_boundary_at,
