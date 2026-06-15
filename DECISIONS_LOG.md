@@ -1,8 +1,21 @@
 # Decisions Log
 
-> Historical document.
-> Superseded by `docs/TZ_TIME_AGENT_FINAL_v7_1.md`.
-> Do not use this file for planning new stages.
+> Historical or summary document.
+> Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`.
+
+## 2026-06-15 — Time-Agent plan v8.1 adopted
+
+1. Daily Targets включён как Stage 18.7.
+2. Daily Control включён как Stage 20.
+3. Task Lifecycle сдвинут на Stage 21.
+4. Production hardening и основной DoD — Stage 22.
+5. Idea Vault — Stage 23.
+6. Statistics & Forecasting — Stage 24.
+7. Stage 23-24 post-final и не двигают DoD.
+8. Исполнитель выбирается владельцем перед этапом: Codex follows `AGENTS.md`; Claude Code follows `CLAUDE.md`.
+9. Check-in rules-first.
+10. Сон protected.
+11. `Впустую` только owner-selected.
 
 ## Visible Architecture Decisions
 

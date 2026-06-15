@@ -1,22 +1,25 @@
 # Time-Agent Current Short
 
 > Summary only.
-> Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v7_1.md`
+> Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
 
 ## Current State
 
 - Stage 18.6-P: CLOSED / PRODUCTION PASS.
-- Production HEAD: `fd23d87`.
-- Documentation HEAD: `3e98bcb`.
-- Next stage: Stage 18.6-C0.
-- Then: Stage 18.6-C `/usage`, Stage 18.6-D hard limits, audits, Stage 19.
+- Production code HEAD at smoke: `fd23d87`.
+- Repository HEAD before v8.1 docs update: `41fd89c`.
+- Current next stage: Stage 18.6-C0.
+- Stage 18.7 is not started.
 
-## Product Target
+## Route
 
-Time-Agent is a Telegram-first Personal Mental Load Dispatcher / external memory assistant.
+`18.6-C0 -> 18.6-C /usage -> 18.6-D hard limits -> audits -> 18.7 Daily Targets MVP -> 19 LLM Capture Intelligence -> 20 Daily Control 24/7 -> 21 Task Lifecycle -> 22 Production hardening + main DoD -> 23 Idea Vault -> 24 Statistics & Forecasting`
 
-Core flow:
+## Key Decisions
 
-`capture -> organize -> remind -> protect -> plan -> review`
-
-The v1 result should feel like a private dispatcher that captures mental load, protects prayer and other non-negotiable priorities, plans only after context checks, and keeps the owner in control of sensitive or external actions.
+- Daily Targets is in the main product.
+- Daily Control is in the main product after Stage 19.
+- Stages 23-24 are post-final and do not move the main DoD.
+- Sleep is protected.
+- Owner-only category `впустую` is selected only by the owner.
+- The owner chooses Codex or Claude Code before each stage.

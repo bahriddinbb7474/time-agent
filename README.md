@@ -2,7 +2,7 @@
 
 Telegram-first Personal Mental Load Dispatcher / external memory assistant.
 
-Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v7_1.md`.
+Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`.
 
 Current short snapshot: `TZ_CURRENT_SHORT.md`.
 
@@ -19,31 +19,34 @@ Current short snapshot: `TZ_CURRENT_SHORT.md`.
 ## Current Status
 
 - Stage 18.6-P: CLOSED / PRODUCTION PASS.
-- Production HEAD: `fd23d87`.
-- Documentation HEAD: `3e98bcb`.
-- Next: Stage 18.6-C0.
-- Then: Stage 18.6-C `/usage`, Stage 18.6-D hard limits, audits, Stage 19.
+- Production code HEAD at smoke: `fd23d87`.
+- Repository HEAD before v8.1 docs update: `41fd89c`.
+- Current next stage: Stage 18.6-C0.
 
-## Core Capabilities
+## Current Route
 
-- Owner-only Telegram bot access.
-- Local task, Later Inbox, boss, focus, crisis, and done flows.
-- Prayer-aware scheduling for Asia/Tashkent with Hanafi `school=1`.
-- Morning briefing and evening planning.
-- DB-backed capture drafts with owner confirmation before task creation.
-- Disabled-by-default STT and AI advisor provider foundation.
-- SQLite migrations through the project migration runner.
-- Safe debug/test behavior gated by config.
+- 18.6-C0: token fields.
+- 18.6-C: `/usage`.
+- 18.6-D: hard limits.
+- PRE-18.7 / PRE-19: audits and fixes.
+- 18.7: Daily Targets MVP.
+- 19: LLM Capture Intelligence.
+- 20: Daily Control 24/7.
+- 21: Task Lifecycle.
+- 22: Production hardening + main DoD.
+- 23: Idea Vault.
+- 24: Statistics & Forecasting.
 
-## Local Run
+## Core Decisions
 
-The Python entrypoint is:
-
-```bash
-python -m app.main
-```
-
-For local non-Docker execution, set `PYTHONPATH` so `app` resolves from `src`.
+- Daily Targets is part of the main product and does not depend on LLM.
+- Daily Control is part of the main product after Stage 19.
+- Stage 23-24 are post-final modules and do not move the main DoD.
+- Sleep is a protected metric.
+- Owner-only category `впустую` is selected only by the owner.
+- Button check-ins are rules-first and do not call LLM.
+- Free text or voice uses at most one LLM call.
+- The owner chooses the executor before each stage: Codex or Claude Code.
 
 ## Verification
 

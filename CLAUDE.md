@@ -31,15 +31,28 @@ The product must reduce the owner's mental load rather than introduce additional
 
 ## Canonical project plan
 
-`docs/TZ_TIME_AGENT_FINAL_v7_1.md` — approved Time-Agent final plan (v7.1).
+`docs/TZ_TIME_AGENT_FINAL_v8_1.md` — approved Time-Agent final plan (v8.1).
 Read it for stage scope, acceptance criteria, invariants, and Definition of Done.
+
+The owner chooses the executor for each stage:
+
+- Claude Code first reads and follows root `CLAUDE.md`.
+- Codex first reads and follows root `AGENTS.md`.
+
+Do not mix executor-specific instruction files.
+
+Current route:
+
+```text
+18.6-C0 -> 18.6-C /usage -> 18.6-D hard limits -> audits -> 18.7 Daily Targets MVP -> 19 LLM Capture Intelligence -> 20 Daily Control 24/7 -> 21 Task Lifecycle -> 22 Production hardening + main DoD -> 23 Idea Vault -> 24 Statistics & Forecasting
+```
 
 ## Source of truth
 
 Before working, read the relevant approved task and:
 
 ```text
-docs/TZ_TIME_AGENT_FINAL_v7_1.md
+docs/TZ_TIME_AGENT_FINAL_v8_1.md
 PROJECT_MAP.md
 PROJECT_STATUS.md
 AGENTS.md

@@ -150,9 +150,15 @@ Do not change code.
 
 ## Canonical project plan
 
-Before planning or implementing a new project stage, read:
+Before analyzing, planning, or implementing a project stage, read:
 
-`docs/TZ_TIME_AGENT_FINAL_v7_1.md`
+`docs/TZ_TIME_AGENT_FINAL_v8_1.md`
+
+The owner chooses the executor for each stage:
+- Codex follows root `AGENTS.md`.
+- Claude Code follows root `CLAUDE.md`.
+
+Do not mix executor-specific instruction files.
 
 ---
 

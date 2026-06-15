@@ -1,11 +1,25 @@
 # Project Map
 
 > Summary only.
-> Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v7_1.md`
+> Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`.
 
 ## Purpose
 
 Time-Agent is a Telegram bot for personal mental-load dispatching with context-aware scheduling: protected slots, sleep windows, prayer windows, Siyam/health context, reminders, capture drafts, and planning.
+
+## Current Route
+
+- 18.6-C0: token fields.
+- 18.6-C: `/usage`.
+- 18.6-D: hard limits.
+- PRE-18.7 / PRE-19: audits and fixes.
+- 18.7: Daily Targets MVP; does not depend on LLM and depends on completed audits/migration foundation.
+- 19: LLM Capture Intelligence.
+- 20: Daily Control 24/7; depends on Stage 19.
+- 21: Task Lifecycle.
+- 22: Production hardening + main DoD.
+- 23: Idea Vault.
+- 24: Statistics & Forecasting; depends on sufficient data quality.
 
 ## Repository Structure
 

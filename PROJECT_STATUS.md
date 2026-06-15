@@ -1,28 +1,34 @@
 # Project Status
 
 > Summary only.
-> Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v7_1.md`
+> Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
 
 ## Current Stage
 
+- Current: Stage 18.6-C0 — not started.
+- Previous: Stage 18.6-P — production PASS.
 - Stage 18.6-P: CLOSED / PRODUCTION PASS.
-- Production HEAD: `fd23d87`.
-- Documentation HEAD: `3e98bcb`.
-- Next stage: Stage 18.6-C0.
-- Then: Stage 18.6-C `/usage`, Stage 18.6-D hard limits, audits, Stage 19.
+- Production code HEAD at smoke: `fd23d87`.
+- Repository HEAD before v8.1 docs update: `41fd89c`.
 
-## Stable Baseline
+This v8.1 update is a plan/documentation adoption only. It does not implement new runtime features and does not start Stage 18.7.
 
-- Owner-only Telegram bot.
-- SQLite persistence with project migration runner.
-- Prayer-aware scheduling for Asia/Tashkent, Hanafi `school=1`.
-- Task, Later Inbox, boss, focus, crisis, done, daily plan, morning briefing, and evening planning flows.
-- DB-backed capture drafts with owner confirmation before task creation.
-- Voice/STT/AI provider foundation remains disabled by default unless a later approved stage enables real providers.
-- Production DB migration steps must use explicit backup, verification, and owner approval.
+## Current Route
+
+- 18.6-C0: token fields.
+- 18.6-C: `/usage`.
+- 18.6-D: hard limits.
+- PRE-18.7 / PRE-19: audits and fixes.
+- 18.7: Daily Targets MVP.
+- 19: LLM Capture Intelligence.
+- 20: Daily Control 24/7.
+- 21: Task Lifecycle.
+- 22: Production hardening + main DoD.
+- 23: Idea Vault.
+- 24: Statistics & Forecasting.
 
 ## Planning Rule
 
 Use this file only as a short status snapshot. For any new stage, read and follow:
 
-`docs/TZ_TIME_AGENT_FINAL_v7_1.md`
+`docs/TZ_TIME_AGENT_FINAL_v8_1.md`

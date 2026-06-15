@@ -1,3 +1,7 @@
+> Historical document.
+> Superseded by `docs/TZ_TIME_AGENT_FINAL_v8_1.md`.
+> Do not use this file for planning new stages.
+
 # ТЗ Time-Agent: план реализации до финала — версия архитектора (v7.1)
 
 **Дата:** 14.06.2026
