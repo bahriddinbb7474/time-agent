@@ -57,6 +57,10 @@ OPENROUTER_SETTINGS = SimpleNamespace(
     stt_max_duration_sec=60,
     stt_max_file_mb=10,
     openrouter_stt_model="openai/whisper-large-v3-turbo",
+    stt_daily_request_limit=0,
+    stt_daily_seconds_limit=0,
+    llm_daily_request_limit=0,
+    llm_daily_cost_usd_limit=0.0,
 )
 
 
@@ -405,6 +409,10 @@ async def test_voice_fake_stt_creates_db_draft_without_task() -> None:
             settings = SimpleNamespace(
                 stt_max_duration_sec=60,
                 stt_max_file_mb=10,
+                stt_daily_request_limit=0,
+                stt_daily_seconds_limit=0,
+                llm_daily_request_limit=0,
+                llm_daily_cost_usd_limit=0.0,
             )
             stt_provider = RecordingSTTProvider("personal Позвонить маме")
 
@@ -484,7 +492,11 @@ async def test_voice_telegram_download_error_gives_safe_message() -> None:
                     raise RuntimeError("Telegram download failed")
 
             message.bot = _FailingBot()
-            settings = SimpleNamespace(stt_max_duration_sec=60, stt_max_file_mb=10)
+            settings = SimpleNamespace(
+                stt_max_duration_sec=60, stt_max_file_mb=10,
+                stt_daily_request_limit=0, stt_daily_seconds_limit=0,
+                llm_daily_request_limit=0, llm_daily_cost_usd_limit=0.0,
+            )
             await capture_voice_message(
                 message,
                 session,
@@ -515,7 +527,11 @@ async def test_voice_unexpected_provider_exception_gives_safe_message() -> None:
                 async def transcribe_audio(self, audio_path: Path) -> STTResult:
                     raise RuntimeError("unexpected provider bug")
 
-            settings = SimpleNamespace(stt_max_duration_sec=60, stt_max_file_mb=10)
+            settings = SimpleNamespace(
+                stt_max_duration_sec=60, stt_max_file_mb=10,
+                stt_daily_request_limit=0, stt_daily_seconds_limit=0,
+                llm_daily_request_limit=0, llm_daily_cost_usd_limit=0.0,
+            )
             await capture_voice_message(
                 message,
                 session,
@@ -546,7 +562,11 @@ async def test_voice_cancelled_error_propagates() -> None:
                 async def transcribe_audio(self, audio_path: Path) -> STTResult:
                     raise asyncio.CancelledError()
 
-            settings = SimpleNamespace(stt_max_duration_sec=60, stt_max_file_mb=10)
+            settings = SimpleNamespace(
+                stt_max_duration_sec=60, stt_max_file_mb=10,
+                stt_daily_request_limit=0, stt_daily_seconds_limit=0,
+                llm_daily_request_limit=0, llm_daily_cost_usd_limit=0.0,
+            )
             cancelled_raised = False
             try:
                 await capture_voice_message(
@@ -846,7 +866,11 @@ async def test_fake_provider_no_usage_recorded() -> None:
     try:
         async with Session() as session:
             message = FakeVoiceMessage()
-            settings = SimpleNamespace(stt_max_duration_sec=60, stt_max_file_mb=10)
+            settings = SimpleNamespace(
+                stt_max_duration_sec=60, stt_max_file_mb=10,
+                stt_daily_request_limit=0, stt_daily_seconds_limit=0,
+                llm_daily_request_limit=0, llm_daily_cost_usd_limit=0.0,
+            )
             await capture_voice_message(
                 message, session, settings=settings,
                 stt_provider=RecordingSTTProvider("personal Позвонить маме"),

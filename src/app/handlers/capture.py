@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import load_config
+from app.core.time import now_tz
 from app.services.capture_confirmation_service import (
     CAPTURE_ACTION_BOSS,
     CAPTURE_ACTION_CANCEL,
@@ -31,6 +33,7 @@ from app.services.capture_router_service import (
     CAPTURE_KIND_IGNORE,
     CaptureRouterService,
 )
+from app.services.api_limit_service import ApiLimitService
 from app.services.api_usage_service import ApiUsageService
 from app.services.stt_provider import DisabledSTTProvider, OpenRouterSTTProvider, get_stt_provider
 from app.services.voice_capture_safety import (
@@ -42,6 +45,12 @@ from app.services.voice_capture_safety import (
 log = logging.getLogger(__name__)
 
 router = Router()
+
+# Process-level lock serialises the preflight check and the provider call so
+# that two concurrent voice messages cannot both pass the last available limit
+# slot.  Valid for single-instance deployment only.  Multi-instance requires
+# a distributed lock or a DB-level reservation pattern.
+_STT_LOCK: asyncio.Lock = asyncio.Lock()
 
 
 def build_capture_confirmation_keyboard() -> InlineKeyboardMarkup:
@@ -135,27 +144,59 @@ async def capture_voice_message(
         return
 
     voice_duration = message.voice.duration
-    stt_request_started = False
     result = None
-    try:
-        async with downloaded_voice_temp_path(message) as audio_path:
-            stt_request_started = True
-            result = await provider.transcribe_audio(audio_path)
-    except Exception:
-        if stt_request_started and isinstance(provider, OpenRouterSTTProvider):
-            await _record_stt_usage_best_effort(
-                session, result, voice_duration, settings, "error"
+
+    # Lock covers preflight + provider call + usage recording.
+    # Ensures two concurrent requests cannot both pass the last available slot.
+    async with _STT_LOCK:
+        # ── Preflight hard-limit check ───────────────────────────────────────
+        try:
+            decision = await ApiLimitService(session, settings).check_stt(
+                planned_seconds=float(voice_duration),
+                usage_date=now_tz().date(),
             )
-        log.exception("Voice processing failed")
-        await message.answer("Не удалось обработать голос. Отправь текстом.")
-        return
+        except Exception:
+            # fail-open per canonical TZ §18.6-D: DB error must not block owner
+            log.warning("STT limit check failed; allowing request (fail-open)")
+            decision = None
 
-    if isinstance(provider, OpenRouterSTTProvider) and result.request_made:
-        status = "success" if result.enabled else "error"
-        await _record_stt_usage_best_effort(
-            session, result, voice_duration, settings, status
-        )
+        if decision is not None and not decision.allowed:
+            try:
+                async with session.begin_nested():
+                    await ApiUsageService(session).record_limit_exceeded(
+                        provider="openrouter",
+                        service_type="stt",
+                        model=settings.openrouter_stt_model,
+                    )
+            except Exception:
+                log.warning("Failed to record STT limit_exceeded usage", exc_info=True)
+            await message.answer(
+                "Лимит распознавания на сегодня достигнут.\nНапиши сообщение текстом."
+            )
+            return
 
+        # ── STT provider call ────────────────────────────────────────────────
+        stt_request_started = False
+        try:
+            async with downloaded_voice_temp_path(message) as audio_path:
+                stt_request_started = True
+                result = await provider.transcribe_audio(audio_path)
+        except Exception:
+            if stt_request_started and isinstance(provider, OpenRouterSTTProvider):
+                await _record_stt_usage_best_effort(
+                    session, result, voice_duration, settings, "error"
+                )
+            log.exception("Voice processing failed")
+            await message.answer("Не удалось обработать голос. Отправь текстом.")
+            return
+
+        if isinstance(provider, OpenRouterSTTProvider) and result.request_made:
+            status = "success" if result.enabled else "error"
+            await _record_stt_usage_best_effort(
+                session, result, voice_duration, settings, status
+            )
+
+    # Lock released; result is always set here (all error paths return above)
     if not result.enabled or not result.text:
         await message.answer(result.user_message)
         return

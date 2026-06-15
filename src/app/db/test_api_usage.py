@@ -1324,6 +1324,215 @@ async def test_stt_record_has_zero_output_tokens():
     print("PASS: test_stt_record_has_zero_output_tokens")
 
 
+# ─── Stage 18.6-D: extended request_count / limit_exceeded validation ────────
+
+
+async def test_request_count_zero_limit_exceeded_allowed():
+    """request_count=0 is accepted when status='limit_exceeded'."""
+    svc = ApiUsageService(_mock_session())
+    row = await svc.record(
+        provider="openrouter", service_type="stt",
+        model="openai/whisper-large-v3",
+        request_count=0, status="limit_exceeded",
+    )
+    assert row.request_count == 0
+    assert row.status == "limit_exceeded"
+    print("PASS: test_request_count_zero_limit_exceeded_allowed")
+
+
+async def test_request_count_nonzero_limit_exceeded_rejected():
+    """request_count=1 with status='limit_exceeded' is rejected."""
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3",
+            request_count=1, status="limit_exceeded",
+        )
+    )
+    print("PASS: test_request_count_nonzero_limit_exceeded_rejected")
+
+
+async def test_request_count_negative_rejected():
+    """Negative request_count is always rejected."""
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3",
+            request_count=-1,
+        )
+    )
+    print("PASS: test_request_count_negative_rejected")
+
+
+async def test_request_count_bool_true_rejected():
+    """bool True is rejected for request_count (isinstance check)."""
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3",
+            request_count=True,
+        )
+    )
+    print("PASS: test_request_count_bool_true_rejected")
+
+
+async def test_request_count_bool_false_rejected():
+    """bool False is rejected for request_count (isinstance check)."""
+    svc = ApiUsageService(_mock_session())
+    await _expect_validation_error(
+        svc.record(
+            provider="openrouter", service_type="stt",
+            model="openai/whisper-large-v3",
+            request_count=False,
+        )
+    )
+    print("PASS: test_request_count_bool_false_rejected")
+
+
+async def test_record_limit_exceeded_uses_normal_path():
+    """record_limit_exceeded() writes request_count=0/status=limit_exceeded via record()."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        async with maker() as session:
+            svc = ApiUsageService(session)
+            row = await svc.record_limit_exceeded(
+                provider="openrouter",
+                service_type="stt",
+                model="openai/whisper-large-v3",
+            )
+            await session.commit()
+
+        assert row.request_count == 0
+        assert row.status == "limit_exceeded"
+        assert row.audio_seconds == 0.0
+        assert row.estimated_cost_usd == 0.0
+        assert row.input_tokens == 0
+        assert row.output_tokens == 0
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_record_limit_exceeded_uses_normal_path")
+
+
+async def test_record_limit_exceeded_persisted_correctly():
+    """limit_exceeded row is written to DB with correct fields."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        async with maker() as session:
+            await ApiUsageService(session).record_limit_exceeded(
+                provider="openrouter",
+                service_type="stt",
+                model="openai/whisper-large-v3",
+            )
+            await session.commit()
+
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT request_count, status, audio_seconds, estimated_cost_usd, "
+                "input_tokens, output_tokens FROM api_usage"
+            ).fetchall()
+            assert len(rows) == 1, f"expected 1 row, got {len(rows)}"
+            r = rows[0]
+            assert r[0] == 0, f"request_count must be 0, got {r[0]}"
+            assert r[1] == "limit_exceeded", f"status must be limit_exceeded, got {r[1]}"
+            assert r[2] == 0.0, f"audio_seconds must be 0.0, got {r[2]}"
+            assert r[3] == 0.0, f"cost must be 0.0, got {r[3]}"
+            assert r[4] == 0, f"input_tokens must be 0, got {r[4]}"
+            assert r[5] == 0, f"output_tokens must be 0, got {r[5]}"
+        finally:
+            conn.close()
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_record_limit_exceeded_persisted_correctly")
+
+
+async def test_record_limit_exceeded_not_counted_in_stt_request_count():
+    """limit_exceeded rows (RC=0) do not add to stt_request_count in aggregation."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        async with maker() as session:
+            svc = ApiUsageService(session)
+            await svc.record_stt(
+                provider="openrouter", model="openai/whisper-large-v3",
+                audio_seconds=5.0, status="success",
+            )
+            await svc.record_limit_exceeded(
+                provider="openrouter", service_type="stt",
+                model="openai/whisper-large-v3",
+            )
+            await session.commit()
+
+        async with maker() as session:
+            from datetime import datetime, timezone
+            ts_date = datetime.now(timezone.utc).astimezone(__import__("app.core.time", fromlist=["APP_TZ"]).APP_TZ).date()
+            summary = await ApiUsageService(session).get_daily_summary(ts_date)
+
+        assert summary.stt_request_count == 1, (
+            f"stt_request_count must be 1 (limit_exceeded row excluded), got {summary.stt_request_count}"
+        )
+        assert summary.limit_exceeded_count == 1, (
+            f"limit_exceeded_count must be 1, got {summary.limit_exceeded_count}"
+        )
+        assert summary.no_request_count == 1, (
+            f"no_request_count must be 1, got {summary.no_request_count}"
+        )
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_record_limit_exceeded_not_counted_in_stt_request_count")
+
+
+async def test_llm_estimated_cost_usd_in_summary():
+    """llm_estimated_cost_usd aggregates LLM costs only, not STT costs."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        async with maker() as session:
+            svc = ApiUsageService(session)
+            await svc.record_stt(
+                provider="openrouter", model="openai/whisper-large-v3",
+                audio_seconds=5.0, estimated_cost_usd=0.001, status="success",
+            )
+            await svc.record(
+                provider="openrouter", service_type="llm",
+                model="openai/gpt-4o-mini", estimated_cost_usd=0.005, status="success",
+            )
+            await session.commit()
+
+        async with maker() as session:
+            from datetime import datetime, timezone
+            ts_date = datetime.now(timezone.utc).astimezone(__import__("app.core.time", fromlist=["APP_TZ"]).APP_TZ).date()
+            summary = await ApiUsageService(session).get_daily_summary(ts_date)
+
+        assert abs(summary.llm_estimated_cost_usd - 0.005) < 1e-9, (
+            f"llm_estimated_cost_usd must be 0.005 (LLM only), got {summary.llm_estimated_cost_usd}"
+        )
+        assert abs(summary.estimated_cost_usd - 0.006) < 1e-9, (
+            f"total cost must be 0.006, got {summary.estimated_cost_usd}"
+        )
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_llm_estimated_cost_usd_in_summary")
+
+
 # ─── runner ───────────────────────────────────────────────────────────────────
 
 
@@ -1396,6 +1605,16 @@ ASYNC_TESTS = [
     # Stage 18.6-C0: STT regression
     test_stt_record_has_zero_input_tokens,
     test_stt_record_has_zero_output_tokens,
+    # Stage 18.6-D: extended request_count / limit_exceeded validation
+    test_request_count_zero_limit_exceeded_allowed,
+    test_request_count_nonzero_limit_exceeded_rejected,
+    test_request_count_negative_rejected,
+    test_request_count_bool_true_rejected,
+    test_request_count_bool_false_rejected,
+    test_record_limit_exceeded_uses_normal_path,
+    test_record_limit_exceeded_persisted_correctly,
+    test_record_limit_exceeded_not_counted_in_stt_request_count,
+    test_llm_estimated_cost_usd_in_summary,
 ]
 
 

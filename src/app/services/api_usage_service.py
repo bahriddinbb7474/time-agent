@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
 from sqlalchemy import case, func, select
@@ -37,6 +37,7 @@ class DailyUsageSummary:
     llm_input_tokens: int
     llm_output_tokens: int
     estimated_cost_usd: float
+    llm_estimated_cost_usd: float = field(default=0.0)
 
 
 def _validate_token_count(name: str, value: object) -> int:
@@ -124,6 +125,32 @@ class ApiUsageService:
             occurred_at=occurred_at,
         )
 
+    async def record_limit_exceeded(
+        self,
+        *,
+        provider: str,
+        service_type: str,
+        model: str,
+        occurred_at: datetime | None = None,
+    ) -> ApiUsageRecord:
+        """Record a hard-limit block event via the normal record() path.
+
+        request_count=0 is accepted by _validate() when status='limit_exceeded'.
+        No audio, cost, or token data is recorded (provider was never called).
+        """
+        return await self.record(
+            provider=provider,
+            service_type=service_type,
+            model=model,
+            request_count=0,
+            audio_seconds=0.0,
+            estimated_cost_usd=0.0,
+            status="limit_exceeded",
+            input_tokens=0,
+            output_tokens=0,
+            occurred_at=occurred_at,
+        )
+
     def _validate(
         self,
         *,
@@ -143,9 +170,29 @@ class ApiUsageService:
             )
         if not model or not model.strip():
             raise ApiUsageValidationError("model must not be empty")
-        if request_count < 1:
+        if status not in _ALLOWED_STATUSES:
             raise ApiUsageValidationError(
-                f"request_count must be >= 1, got {request_count}"
+                f"status must be one of {sorted(_ALLOWED_STATUSES)!r}, got {status!r}"
+            )
+        # request_count: bool rejected; 0 allowed only for limit_exceeded
+        if isinstance(request_count, bool):
+            raise ApiUsageValidationError("request_count must not be bool")
+        if not isinstance(request_count, int):
+            raise ApiUsageValidationError(
+                f"request_count must be int, got {type(request_count).__name__}"
+            )
+        if request_count < 0:
+            raise ApiUsageValidationError(
+                f"request_count must be >= 0, got {request_count}"
+            )
+        if status == "limit_exceeded":
+            if request_count != 0:
+                raise ApiUsageValidationError(
+                    f"request_count must be 0 for status='limit_exceeded', got {request_count}"
+                )
+        elif request_count < 1:
+            raise ApiUsageValidationError(
+                f"request_count must be >= 1 for status={status!r}, got {request_count}"
             )
         if not math.isfinite(audio_seconds) or audio_seconds < 0:
             raise ApiUsageValidationError(
@@ -154,10 +201,6 @@ class ApiUsageService:
         if not math.isfinite(estimated_cost_usd) or estimated_cost_usd < 0:
             raise ApiUsageValidationError(
                 f"estimated_cost_usd must be finite and >= 0, got {estimated_cost_usd}"
-            )
-        if status not in _ALLOWED_STATUSES:
-            raise ApiUsageValidationError(
-                f"status must be one of {sorted(_ALLOWED_STATUSES)!r}, got {status!r}"
             )
 
     async def get_daily_summary(self, usage_date: date) -> DailyUsageSummary:
@@ -225,6 +268,12 @@ class ApiUsageService:
                 )
             ).label("llm_output_tokens"),
             func.sum(ApiUsageRecord.estimated_cost_usd).label("estimated_cost_usd"),
+            func.sum(
+                case(
+                    (ApiUsageRecord.service_type == "llm", ApiUsageRecord.estimated_cost_usd),
+                    else_=0.0,
+                )
+            ).label("llm_estimated_cost_usd"),
         ).where(ApiUsageRecord.usage_date == usage_date)
 
         row = (await self._session.execute(stmt)).one()
@@ -258,4 +307,5 @@ class ApiUsageService:
             llm_input_tokens=_safe_int(row.llm_input_tokens),
             llm_output_tokens=_safe_int(row.llm_output_tokens),
             estimated_cost_usd=_safe_float(row.estimated_cost_usd),
+            llm_estimated_cost_usd=_safe_float(row.llm_estimated_cost_usd),
         )
