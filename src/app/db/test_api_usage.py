@@ -301,6 +301,187 @@ def test_migration_token_version_recorded():
     print("PASS: test_migration_token_version_recorded")
 
 
+# ─── Stage 18.6-C0 POST-REVIEW: direct DB constraint tests ──────────────────
+
+
+def test_db_constraint_sql_has_check():
+    """sqlite_master SQL for api_usage contains both CHECK constraints."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.isolation_level = None
+        try:
+            rows = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='api_usage'"
+            ).fetchall()
+            assert rows, "api_usage not found in sqlite_master"
+            combined = " ".join(r[0] or "" for r in rows).upper()
+            assert "CHECK" in combined, f"CHECK not found in schema SQL: {combined!r}"
+            assert "INPUT_TOKENS" in combined, (
+                f"input_tokens CHECK not found in schema SQL: {combined!r}"
+            )
+            assert "OUTPUT_TOKENS" in combined, (
+                f"output_tokens CHECK not found in schema SQL: {combined!r}"
+            )
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_db_constraint_sql_has_check")
+
+
+def test_db_direct_negative_input_tokens_insert_rejected():
+    """Direct INSERT bypassing ApiUsageService with negative input_tokens is rejected by SQLite."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.isolation_level = None
+        try:
+            conn.execute("BEGIN")
+            try:
+                conn.execute(
+                    "INSERT INTO api_usage "
+                    "(created_at, usage_date, provider, service_type, model, "
+                    "request_count, audio_seconds, estimated_cost_usd, status, "
+                    "input_tokens, output_tokens) "
+                    "VALUES (datetime('now'), date('now'), 'test', 'stt', 'test-model', "
+                    "1, 0.0, 0.0, 'success', -1, 0)"
+                )
+                conn.execute("COMMIT")
+                raise AssertionError("expected IntegrityError for negative input_tokens INSERT")
+            except sqlite3.IntegrityError as e:
+                conn.execute("ROLLBACK")
+                msg = str(e).lower()
+                assert "check" in msg or "constraint" in msg, (
+                    f"unexpected error message: {e}"
+                )
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_db_direct_negative_input_tokens_insert_rejected")
+
+
+def test_db_direct_negative_output_tokens_insert_rejected():
+    """Direct INSERT bypassing ApiUsageService with negative output_tokens is rejected by SQLite."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.isolation_level = None
+        try:
+            conn.execute("BEGIN")
+            try:
+                conn.execute(
+                    "INSERT INTO api_usage "
+                    "(created_at, usage_date, provider, service_type, model, "
+                    "request_count, audio_seconds, estimated_cost_usd, status, "
+                    "input_tokens, output_tokens) "
+                    "VALUES (datetime('now'), date('now'), 'test', 'stt', 'test-model', "
+                    "1, 0.0, 0.0, 'success', 0, -1)"
+                )
+                conn.execute("COMMIT")
+                raise AssertionError("expected IntegrityError for negative output_tokens INSERT")
+            except sqlite3.IntegrityError as e:
+                conn.execute("ROLLBACK")
+                msg = str(e).lower()
+                assert "check" in msg or "constraint" in msg, (
+                    f"unexpected error message: {e}"
+                )
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_db_direct_negative_output_tokens_insert_rejected")
+
+
+def test_db_direct_negative_input_tokens_update_rejected():
+    """Direct UPDATE: setting input_tokens=-1 is rejected; original row preserved after rollback."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.isolation_level = None
+        try:
+            conn.execute(
+                "INSERT INTO api_usage "
+                "(created_at, usage_date, provider, service_type, model, "
+                "request_count, audio_seconds, estimated_cost_usd, status, "
+                "input_tokens, output_tokens) "
+                "VALUES (datetime('now'), date('now'), 'test', 'stt', 'test-model', "
+                "1, 0.0, 0.0, 'success', 10, 5)"
+            )
+            row_id = conn.execute("SELECT id FROM api_usage").fetchone()[0]
+
+            conn.execute("BEGIN")
+            try:
+                conn.execute(
+                    "UPDATE api_usage SET input_tokens = -1 WHERE id = ?", (row_id,)
+                )
+                conn.execute("COMMIT")
+                raise AssertionError("expected IntegrityError for negative input_tokens UPDATE")
+            except sqlite3.IntegrityError as e:
+                conn.execute("ROLLBACK")
+                msg = str(e).lower()
+                assert "check" in msg or "constraint" in msg, (
+                    f"unexpected error message: {e}"
+                )
+
+            row = conn.execute(
+                "SELECT input_tokens, output_tokens FROM api_usage WHERE id = ?", (row_id,)
+            ).fetchone()
+            assert row is not None, "row lost after rollback"
+            assert row[0] == 10, f"input_tokens changed after failed UPDATE+rollback: {row[0]}"
+            assert row[1] == 5, f"output_tokens changed after failed UPDATE+rollback: {row[1]}"
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_db_direct_negative_input_tokens_update_rejected")
+
+
+def test_db_direct_negative_output_tokens_update_rejected():
+    """Direct UPDATE: setting output_tokens=-1 is rejected; original row preserved after rollback."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.isolation_level = None
+        try:
+            conn.execute(
+                "INSERT INTO api_usage "
+                "(created_at, usage_date, provider, service_type, model, "
+                "request_count, audio_seconds, estimated_cost_usd, status, "
+                "input_tokens, output_tokens) "
+                "VALUES (datetime('now'), date('now'), 'test', 'stt', 'test-model', "
+                "1, 0.0, 0.0, 'success', 10, 5)"
+            )
+            row_id = conn.execute("SELECT id FROM api_usage").fetchone()[0]
+
+            conn.execute("BEGIN")
+            try:
+                conn.execute(
+                    "UPDATE api_usage SET output_tokens = -1 WHERE id = ?", (row_id,)
+                )
+                conn.execute("COMMIT")
+                raise AssertionError("expected IntegrityError for negative output_tokens UPDATE")
+            except sqlite3.IntegrityError as e:
+                conn.execute("ROLLBACK")
+                msg = str(e).lower()
+                assert "check" in msg or "constraint" in msg, (
+                    f"unexpected error message: {e}"
+                )
+
+            row = conn.execute(
+                "SELECT input_tokens, output_tokens FROM api_usage WHERE id = ?", (row_id,)
+            ).fetchone()
+            assert row is not None, "row lost after rollback"
+            assert row[0] == 10, f"input_tokens changed after failed UPDATE+rollback: {row[0]}"
+            assert row[1] == 5, f"output_tokens changed after failed UPDATE+rollback: {row[1]}"
+        finally:
+            conn.close()
+    finally:
+        tmp.cleanup()
+    print("PASS: test_db_direct_negative_output_tokens_update_rejected")
+
+
 # ─── ORM / service tests (async) ──────────────────────────────────────────────
 
 
@@ -1057,6 +1238,12 @@ SYNC_TESTS = [
     test_migration_token_column_defaults,
     test_migration_upgrade_preserves_existing_row,
     test_migration_token_version_recorded,
+    # Stage 18.6-C0 POST-REVIEW: direct DB constraint tests
+    test_db_constraint_sql_has_check,
+    test_db_direct_negative_input_tokens_insert_rejected,
+    test_db_direct_negative_output_tokens_insert_rejected,
+    test_db_direct_negative_input_tokens_update_rejected,
+    test_db_direct_negative_output_tokens_update_rejected,
 ]
 
 ASYNC_TESTS = [

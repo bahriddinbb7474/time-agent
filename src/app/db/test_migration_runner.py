@@ -54,7 +54,15 @@ def _copy_real_migration(path: Path, target_dir: Path) -> None:
     shutil.copy2(path, target_dir / path.name)
 
 
-def _assert_final_schema(db_path: Path) -> None:
+def _assert_final_schema(
+    db_path: Path, expected_versions: list[str] | None = None
+) -> None:
+    if expected_versions is None:
+        expected_versions = [
+            "20260101_0000_baseline_pre_stage14",
+            "20260609_1300_add_daily_plan_lifecycle",
+            "20260612_0300_add_capture_drafts",
+        ]
     conn = sqlite3.connect(db_path)
     try:
         assert EXPECTED_TABLES.issubset(_table_names(conn))
@@ -62,13 +70,18 @@ def _assert_final_schema(db_path: Path) -> None:
         assert {"id", "plan_date", "text", "source", "created_at", "updated_at"}.issubset(
             _columns(conn, "daily_plans")
         )
-        assert _migration_versions(conn) == [
-            "20260101_0000_baseline_pre_stage14",
-            "20260609_1300_add_daily_plan_lifecycle",
-            "20260612_0300_add_capture_drafts",
-        ]
+        assert _migration_versions(conn) == expected_versions
     finally:
         conn.close()
+
+
+_ALL_REAL_VERSIONS = [
+    "20260101_0000_baseline_pre_stage14",
+    "20260609_1300_add_daily_plan_lifecycle",
+    "20260612_0300_add_capture_drafts",
+    "20260614_2000_add_api_usage",
+    "20260615_1000_add_token_usage",
+]
 
 
 def test_idempotency() -> None:
@@ -76,13 +89,11 @@ def test_idempotency() -> None:
         db_path = Path(tmp_dir) / "runner.db"
 
         first = run_migrations(db_path)
-        assert first.applied == [
-            "20260101_0000_baseline_pre_stage14",
-            "20260609_1300_add_daily_plan_lifecycle",
-            "20260612_0300_add_capture_drafts",
-        ]
+        assert first.applied == _ALL_REAL_VERSIONS, (
+            f"expected {_ALL_REAL_VERSIONS}, got {first.applied}"
+        )
         assert first.skipped == []
-        _assert_final_schema(db_path)
+        _assert_final_schema(db_path, expected_versions=_ALL_REAL_VERSIONS)
 
         conn = sqlite3.connect(db_path)
         try:
@@ -94,11 +105,9 @@ def test_idempotency() -> None:
 
         second = run_migrations(db_path)
         assert second.applied == []
-        assert second.skipped == [
-            "20260101_0000_baseline_pre_stage14",
-            "20260609_1300_add_daily_plan_lifecycle",
-            "20260612_0300_add_capture_drafts",
-        ]
+        assert second.skipped == _ALL_REAL_VERSIONS, (
+            f"expected skipped={_ALL_REAL_VERSIONS}, got {second.skipped}"
+        )
 
         conn = sqlite3.connect(db_path)
         try:
@@ -106,7 +115,7 @@ def test_idempotency() -> None:
                 "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
             ).fetchall()
             assert schema_after == schema_before
-            assert len(_migration_versions(conn)) == 3
+            assert len(_migration_versions(conn)) == len(_ALL_REAL_VERSIONS)
         finally:
             conn.close()
 

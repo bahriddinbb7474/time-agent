@@ -13,6 +13,7 @@ def main():
             "20260609_1300_add_daily_plan_lifecycle",
             "20260612_0300_add_capture_drafts",
             "20260614_2000_add_api_usage",
+            "20260615_1000_add_token_usage",
         ]
 
         import sqlite3
