@@ -209,7 +209,7 @@ async def capture_voice_message(
     )
 
 
-@router.message(F.text)
+@router.message(F.text & ~F.text.startswith("/"))
 async def capture_text_message(message: Message, session: AsyncSession):
     if message.text is None or message.chat is None or message.from_user is None:
         return
