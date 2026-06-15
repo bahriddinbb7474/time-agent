@@ -372,7 +372,8 @@ async def test_no_none_in_result_for_empty_db():
         tmp.cleanup()
 
     for field_name in (
-        "total_rows", "request_count", "success_count", "error_count",
+        "total_rows", "request_count", "provider_request_count", "no_request_count",
+        "success_count", "error_count",
         "limit_exceeded_count", "stt_request_count", "stt_audio_seconds",
         "llm_request_count", "llm_input_tokens", "llm_output_tokens",
         "estimated_cost_usd",
@@ -433,6 +434,8 @@ def test_format_empty_day():
         usage_date=date(2026, 6, 15),
         total_rows=0,
         request_count=0,
+        provider_request_count=0,
+        no_request_count=0,
         success_count=0,
         error_count=0,
         limit_exceeded_count=0,
@@ -457,6 +460,8 @@ def test_format_stt_only_day():
         usage_date=date(2026, 6, 15),
         total_rows=3,
         request_count=3,
+        provider_request_count=3,
+        no_request_count=0,
         success_count=3,
         error_count=0,
         limit_exceeded_count=0,
@@ -469,9 +474,11 @@ def test_format_stt_only_day():
     )
     text = _format_usage_message(s)
     assert "📊 API usage — 15.06.2026" in text
-    assert "Запросы: 3" in text
+    assert "Запросы к provider: 3" in text
     assert "✅ Успешно: 3" in text
-    assert "❌ Ошибки: 0" in text
+    assert "❌ Ошибки provider: 0" in text
+    assert "⚪ Без вызова provider: 0" in text
+    assert "🛑 Hard-limit: 0" in text
     assert "🎙 STT" in text
     assert "12,4 сек" in text
     assert "🧠 LLM" in text
@@ -486,6 +493,8 @@ def test_format_mixed_day():
         usage_date=date(2026, 6, 15),
         total_rows=4,
         request_count=4,
+        provider_request_count=4,
+        no_request_count=0,
         success_count=3,
         error_count=1,
         limit_exceeded_count=0,
@@ -510,6 +519,8 @@ def test_format_no_sensitive_data():
         usage_date=date(2026, 6, 15),
         total_rows=2,
         request_count=2,
+        provider_request_count=2,
+        no_request_count=0,
         success_count=2,
         error_count=0,
         limit_exceeded_count=0,
@@ -531,6 +542,8 @@ def test_format_cost_six_decimal_places():
         usage_date=date(2026, 6, 15),
         total_rows=1,
         request_count=1,
+        provider_request_count=1,
+        no_request_count=0,
         success_count=1,
         error_count=0,
         limit_exceeded_count=0,
@@ -552,6 +565,8 @@ def test_format_audio_comma_separator():
         usage_date=date(2026, 6, 15),
         total_rows=1,
         request_count=1,
+        provider_request_count=1,
+        no_request_count=0,
         success_count=1,
         error_count=0,
         limit_exceeded_count=0,
@@ -574,6 +589,8 @@ def test_format_message_length_reasonable():
         usage_date=date(2026, 6, 15),
         total_rows=100,
         request_count=100,
+        provider_request_count=100,
+        no_request_count=0,
         success_count=95,
         error_count=5,
         limit_exceeded_count=0,
@@ -764,6 +781,244 @@ async def test_future_date_returns_zeros():
     print("PASS: test_future_date_returns_zeros")
 
 
+# ─── Provider request / no-request tests ─────────────────────────────────────
+
+
+async def test_provider_request_count_is_rows_with_rc_gt_zero():
+    """provider_request_count counts rows where request_count > 0."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(session, usage_date=TODAY, status="success", request_count=1)
+            await _insert_row(session, usage_date=TODAY, status="error", request_count=1)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert s.provider_request_count == 2
+    assert s.no_request_count == 0
+    print("PASS: test_provider_request_count_is_rows_with_rc_gt_zero")
+
+
+async def test_no_request_count_counts_rc_zero_rows():
+    """no_request_count counts rows where request_count = 0 (inserted directly)."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            # Insert row with request_count=0 directly (bypasses service validator,
+            # exercises DB-level aggregation for future Stage 18.6-D no-HTTP-call rows)
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+            await _insert_row(session, usage_date=TODAY, status="success", request_count=1)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert s.no_request_count == 1, f"expected 1 no-request row, got {s.no_request_count}"
+    assert s.provider_request_count == 1, f"expected 1 provider row, got {s.provider_request_count}"
+    print("PASS: test_no_request_count_counts_rc_zero_rows")
+
+
+async def test_limit_exceeded_shown_separately_not_double_counted():
+    """limit_exceeded rows appear in limit_exceeded_count; no_request_count tracks RC=0."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(session, usage_date=TODAY, status="success", request_count=1)
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert s.limit_exceeded_count == 0, (
+        f"limit_exceeded_count sums request_count for limit_exceeded rows; "
+        f"RC=0 row contributes 0, got {s.limit_exceeded_count}"
+    )
+    assert s.no_request_count == 1
+    assert s.provider_request_count == 1
+    assert s.total_rows == 2
+    print("PASS: test_limit_exceeded_shown_separately_not_double_counted")
+
+
+async def test_stt_request_count_uses_provider_requests_not_total_rows():
+    """STT request count uses SUM(request_count) for STT rows, not COUNT(*) of rows."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(
+                session, usage_date=TODAY, service_type="stt",
+                status="success", request_count=1, audio_seconds=5.0,
+            )
+            await _insert_row(
+                session, usage_date=TODAY, service_type="stt",
+                status="limit_exceeded", request_count=0, audio_seconds=0.0,
+            )
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert s.stt_request_count == 1, (
+        f"stt_request_count must be SUM(request_count) for STT rows = 1, got {s.stt_request_count}"
+    )
+    assert s.total_rows == 2
+    print("PASS: test_stt_request_count_uses_provider_requests_not_total_rows")
+
+
+async def test_mixed_rows_no_request_and_provider():
+    """Mixed day: provider rows + no-request rows; each category is independent."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(session, usage_date=TODAY, status="success", request_count=1)
+            await _insert_row(session, usage_date=TODAY, status="error", request_count=1)
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert s.total_rows == 3
+    assert s.provider_request_count == 2
+    assert s.no_request_count == 1
+    assert s.success_count == 1
+    assert s.error_count == 1
+    print("PASS: test_mixed_rows_no_request_and_provider")
+
+
+async def test_format_shows_bez_vyzova_provider():
+    """Format output includes 'Без вызова provider' label."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(session, usage_date=TODAY, status="success", request_count=1)
+            await _insert_row(session, usage_date=TODAY, status="limit_exceeded", request_count=0)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    text = _format_usage_message(s)
+    assert "Без вызова provider: 1" in text, f"expected 'Без вызова provider: 1' in:\n{text}"
+    assert "Hard-limit: 0" in text
+    print("PASS: test_format_shows_bez_vyzova_provider")
+
+
+async def test_format_provider_request_label_not_just_zaprosы():
+    """Format uses 'Запросы к provider:' not bare 'Запросы:'."""
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        async with maker() as session:
+            await _insert_row(session, usage_date=TODAY, status="success", request_count=1)
+        async with maker() as session:
+            s = await ApiUsageService(session).get_daily_summary(TODAY)
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    text = _format_usage_message(s)
+    assert "Запросы к provider:" in text
+    assert "Ошибки provider:" in text
+    print("PASS: test_format_provider_request_label_not_just_zaprosы")
+
+
+# ─── Tashkent usage_date tests ────────────────────────────────────────────────
+
+
+async def test_tashkent_midnight_boundary_before():
+    """18:59 UTC = 23:59 Tashkent → usage_date is June 15 (same day)."""
+    from datetime import timezone as tz
+    from zoneinfo import ZoneInfo
+    from app.services.api_usage_service import ApiUsageService as Svc
+
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        ts = datetime(2026, 6, 15, 18, 59, 0, tzinfo=tz.utc)
+        async with maker() as session:
+            row = await Svc(session).record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                occurred_at=ts,
+            )
+            await session.commit()
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert row.usage_date == date(2026, 6, 15), (
+        f"18:59 UTC = 23:59 Tashkent, expected 2026-06-15, got {row.usage_date}"
+    )
+    print("PASS: test_tashkent_midnight_boundary_before")
+
+
+async def test_tashkent_midnight_boundary_at():
+    """19:00 UTC = 00:00 Tashkent → usage_date advances to June 16."""
+    from datetime import timezone as tz
+    from app.services.api_usage_service import ApiUsageService as Svc
+
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        ts = datetime(2026, 6, 15, 19, 0, 0, tzinfo=tz.utc)
+        async with maker() as session:
+            row = await Svc(session).record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                occurred_at=ts,
+            )
+            await session.commit()
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert row.usage_date == date(2026, 6, 16), (
+        f"19:00 UTC = 00:00 Tashkent next day, expected 2026-06-16, got {row.usage_date}"
+    )
+    print("PASS: test_tashkent_midnight_boundary_at")
+
+
+async def test_tashkent_midnight_boundary_after():
+    """20:30 UTC = 01:30 Tashkent → usage_date is June 16."""
+    from datetime import timezone as tz
+    from app.services.api_usage_service import ApiUsageService as Svc
+
+    db_path, tmp = _migration_temp_db()
+    try:
+        engine, maker = await _make_session(db_path)
+        ts = datetime(2026, 6, 15, 20, 30, 0, tzinfo=tz.utc)
+        async with maker() as session:
+            row = await Svc(session).record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                occurred_at=ts,
+            )
+            await session.commit()
+        await engine.dispose()
+    finally:
+        tmp.cleanup()
+
+    assert row.usage_date == date(2026, 6, 16), (
+        f"20:30 UTC = 01:30 Tashkent, expected 2026-06-16, got {row.usage_date}"
+    )
+    print("PASS: test_tashkent_midnight_boundary_after")
+
+
 # ─── Test runner ─────────────────────────────────────────────────────────────
 
 SYNC_TESTS = [
@@ -797,6 +1052,18 @@ ASYNC_TESTS = [
     test_handler_db_error_returns_safe_message,
     test_midnight_boundary_date_isolation,
     test_future_date_returns_zeros,
+    # Provider request / no-request
+    test_provider_request_count_is_rows_with_rc_gt_zero,
+    test_no_request_count_counts_rc_zero_rows,
+    test_limit_exceeded_shown_separately_not_double_counted,
+    test_stt_request_count_uses_provider_requests_not_total_rows,
+    test_mixed_rows_no_request_and_provider,
+    test_format_shows_bez_vyzova_provider,
+    test_format_provider_request_label_not_just_zaprosы,
+    # Tashkent usage_date boundary
+    test_tashkent_midnight_boundary_before,
+    test_tashkent_midnight_boundary_at,
+    test_tashkent_midnight_boundary_after,
 ]
 
 

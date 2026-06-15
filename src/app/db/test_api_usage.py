@@ -544,6 +544,7 @@ async def test_llm_record_with_zero_audio():
 
 
 async def test_usage_date_from_occurred_at():
+    """23:59 UTC = 04:59 next day Tashkent (UTC+5) → usage_date is next day."""
     db_path, tmp = _migration_temp_db()
     engine = None
     try:
@@ -557,12 +558,112 @@ async def test_usage_date_from_occurred_at():
                 occurred_at=ts,
             )
             await session.commit()
-        assert row.usage_date == date(2026, 6, 10)
+        assert row.usage_date == date(2026, 6, 11), (
+            f"23:59 UTC should be 04:59 Tashkent next day, got {row.usage_date}"
+        )
     finally:
         if engine:
             await engine.dispose()
         tmp.cleanup()
     print("PASS: test_usage_date_from_occurred_at")
+
+
+async def test_usage_date_tashkent_before_midnight():
+    """18:59 UTC = 23:59 Tashkent same day → usage_date stays on June 15."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        ts = datetime(2026, 6, 15, 18, 59, 0, tzinfo=timezone.utc)
+        async with maker() as session:
+            row = await ApiUsageService(session).record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                occurred_at=ts,
+            )
+            await session.commit()
+        assert row.usage_date == date(2026, 6, 15), (
+            f"18:59 UTC = 23:59 Tashkent, expected 2026-06-15, got {row.usage_date}"
+        )
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_usage_date_tashkent_before_midnight")
+
+
+async def test_usage_date_tashkent_at_midnight():
+    """19:00 UTC = 00:00 Tashkent next day → usage_date advances to June 16."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        ts = datetime(2026, 6, 15, 19, 0, 0, tzinfo=timezone.utc)
+        async with maker() as session:
+            row = await ApiUsageService(session).record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                occurred_at=ts,
+            )
+            await session.commit()
+        assert row.usage_date == date(2026, 6, 16), (
+            f"19:00 UTC = 00:00 Tashkent next day, expected 2026-06-16, got {row.usage_date}"
+        )
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_usage_date_tashkent_at_midnight")
+
+
+async def test_usage_date_tashkent_after_midnight():
+    """20:30 UTC = 01:30 Tashkent next day → usage_date is June 16."""
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        ts = datetime(2026, 6, 15, 20, 30, 0, tzinfo=timezone.utc)
+        async with maker() as session:
+            row = await ApiUsageService(session).record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                occurred_at=ts,
+            )
+            await session.commit()
+        assert row.usage_date == date(2026, 6, 16), (
+            f"20:30 UTC = 01:30 Tashkent, expected 2026-06-16, got {row.usage_date}"
+        )
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_usage_date_tashkent_after_midnight")
+
+
+async def test_usage_date_cross_offset_aware_timestamp():
+    """Aware timestamp with UTC+3 offset: 20:00+03 = 17:00 UTC = 22:00 Tashkent → same day."""
+    from zoneinfo import ZoneInfo
+    db_path, tmp = _migration_temp_db()
+    engine = None
+    try:
+        engine, maker = await _make_engine(db_path)
+        tz_plus3 = ZoneInfo("Europe/Moscow")
+        ts = datetime(2026, 6, 15, 20, 0, 0, tzinfo=tz_plus3)
+        async with maker() as session:
+            row = await ApiUsageService(session).record_stt(
+                provider="openrouter",
+                model="openai/whisper-large-v3",
+                occurred_at=ts,
+            )
+            await session.commit()
+        assert row.usage_date == date(2026, 6, 15), (
+            f"20:00 Moscow (UTC+3) = 17:00 UTC = 22:00 Tashkent, expected 2026-06-15, got {row.usage_date}"
+        )
+    finally:
+        if engine:
+            await engine.dispose()
+        tmp.cleanup()
+    print("PASS: test_usage_date_cross_offset_aware_timestamp")
 
 
 async def test_append_only_multiple_records():
@@ -1250,6 +1351,10 @@ ASYNC_TESTS = [
     test_successful_stt_record,
     test_llm_record_with_zero_audio,
     test_usage_date_from_occurred_at,
+    test_usage_date_tashkent_before_midnight,
+    test_usage_date_tashkent_at_midnight,
+    test_usage_date_tashkent_after_midnight,
+    test_usage_date_cross_offset_aware_timestamp,
     test_append_only_multiple_records,
     test_flush_without_commit_not_persisted,
     test_rollback_removes_record,

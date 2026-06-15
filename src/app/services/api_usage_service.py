@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import APP_TZ
 from app.db.models import ApiUsageRecord
 
 log = logging.getLogger("time-agent.api_usage")
@@ -24,7 +25,9 @@ class ApiUsageValidationError(ValueError):
 class DailyUsageSummary:
     usage_date: date
     total_rows: int
-    request_count: int
+    request_count: int           # SUM(request_count) across all rows
+    provider_request_count: int  # COUNT rows where request_count > 0
+    no_request_count: int        # COUNT rows where request_count = 0
     success_count: int
     error_count: int
     limit_exceeded_count: int
@@ -84,7 +87,7 @@ class ApiUsageService:
         ts = occurred_at if occurred_at is not None else datetime.now(timezone.utc)
         entry = ApiUsageRecord(
             created_at=ts,
-            usage_date=ts.date(),
+            usage_date=ts.astimezone(APP_TZ).date(),
             provider=provider,
             service_type=service_type,
             model=model,
@@ -163,6 +166,18 @@ class ApiUsageService:
             func.sum(ApiUsageRecord.request_count).label("request_count"),
             func.sum(
                 case(
+                    (ApiUsageRecord.request_count > 0, 1),
+                    else_=0,
+                )
+            ).label("provider_request_count"),
+            func.sum(
+                case(
+                    (ApiUsageRecord.request_count == 0, 1),
+                    else_=0,
+                )
+            ).label("no_request_count"),
+            func.sum(
+                case(
                     (ApiUsageRecord.status == "success", ApiUsageRecord.request_count),
                     else_=0,
                 )
@@ -232,6 +247,8 @@ class ApiUsageService:
             usage_date=usage_date,
             total_rows=_safe_int(row.total_rows),
             request_count=_safe_int(row.request_count),
+            provider_request_count=_safe_int(row.provider_request_count),
+            no_request_count=_safe_int(row.no_request_count),
             success_count=_safe_int(row.success_count),
             error_count=_safe_int(row.error_count),
             limit_exceeded_count=_safe_int(row.limit_exceeded_count),

@@ -26,17 +26,18 @@ def _format_usage_message(summary: DailyUsageSummary) -> str:
     audio_str = f"{summary.stt_audio_seconds:.1f}".replace(".", ",")
 
     lines += [
-        f"Запросы: {summary.request_count}",
+        f"Запросы к provider: {summary.provider_request_count}",
         f"✅ Успешно: {summary.success_count}",
-        f"❌ Ошибки: {summary.error_count}",
-        f"⚪ Блокировок: {summary.limit_exceeded_count}",
+        f"❌ Ошибки provider: {summary.error_count}",
+        f"⚪ Без вызова provider: {summary.no_request_count}",
+        f"🛑 Hard-limit: {summary.limit_exceeded_count}",
         "",
         "🎙 STT",
-        f"Запросы: {summary.stt_request_count}",
+        f"Запросы к provider: {summary.stt_request_count}",
         f"Аудио: {audio_str} сек",
         "",
         "🧠 LLM",
-        f"Запросы: {summary.llm_request_count}",
+        f"Запросы к provider: {summary.llm_request_count}",
         f"Input tokens: {summary.llm_input_tokens}",
         f"Output tokens: {summary.llm_output_tokens}",
         "",
