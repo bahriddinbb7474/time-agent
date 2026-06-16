@@ -57,7 +57,7 @@ async def main() -> None:
     await init_db()
 
     bot = Bot(token=cfg.bot_token)
-    scheduler = build_scheduler(bot)
+    scheduler = build_scheduler(bot, db_path=DB_PATH)
     scheduler.start()
     log.info("Scheduler started")
 

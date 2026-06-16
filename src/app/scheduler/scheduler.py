@@ -2,6 +2,7 @@
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -25,7 +26,7 @@ from app.scheduler.jobs import (
 log = logging.getLogger("time-agent.scheduler")
 
 
-def build_scheduler(bot) -> AsyncIOScheduler:
+def build_scheduler(bot, db_path: Path | None = None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=APP_TZ)
 
     scheduler.add_job(
@@ -71,6 +72,36 @@ def build_scheduler(bot) -> AsyncIOScheduler:
         max_instances=1,
         misfire_grace_time=300,
     )
+
+    cfg = load_config()
+    if cfg.backup_enabled:
+        backup_chat_id = cfg.backup_telegram_chat_id or cfg.allowed_telegram_id
+        if backup_chat_id:
+            from app.services.backup_service import run_backup_job
+
+            effective_db_path = db_path if db_path is not None else Path("data") / "app.db"
+            scheduler.add_job(
+                run_backup_job,
+                trigger=CronTrigger(hour=cfg.backup_hour, minute=cfg.backup_minute, timezone=APP_TZ),
+                id="nightly_backup",
+                kwargs={
+                    "db_path": effective_db_path,
+                    "backup_dir": cfg.backup_dir,
+                    "chat_id": backup_chat_id,
+                    "retention_days": cfg.backup_retention_days,
+                    "bot": bot,
+                },
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=600,
+            )
+            log.info(
+                "Nightly backup scheduled at %02d:%02d TZ=%s",
+                cfg.backup_hour,
+                cfg.backup_minute,
+                APP_TZ,
+            )
 
     log.info("Scheduler configured TZ=%s", APP_TZ)
     return scheduler

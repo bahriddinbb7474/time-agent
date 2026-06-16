@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import math
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,6 +26,13 @@ class Config:
     stt_daily_seconds_limit: int
     llm_daily_request_limit: int
     llm_daily_cost_usd_limit: float
+    # Stage 22.1: nightly backup
+    backup_enabled: bool
+    backup_telegram_chat_id: int | None
+    backup_hour: int
+    backup_minute: int
+    backup_retention_days: int
+    backup_dir: Path
 
 
 def _parse_limit_int(env_name: str, raw: str) -> int:
@@ -98,6 +106,16 @@ def load_config() -> Config:
         os.getenv("LLM_DAILY_COST_USD_LIMIT", "0.0") or "0.0",
     )
 
+    backup_enabled = (
+        os.getenv("BACKUP_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+    )
+    raw_backup_chat_id = os.getenv("BACKUP_TELEGRAM_CHAT_ID", "").strip()
+    backup_telegram_chat_id = int(raw_backup_chat_id) if raw_backup_chat_id else None
+    backup_hour = int(os.getenv("BACKUP_HOUR", "2").strip() or "2")
+    backup_minute = int(os.getenv("BACKUP_MINUTE", "30").strip() or "30")
+    backup_retention_days = int(os.getenv("BACKUP_RETENTION_DAYS", "7").strip() or "7")
+    backup_dir = Path(os.getenv("BACKUP_DIR", "data/backups").strip() or "data/backups")
+
     return Config(
         bot_token=token,
         allowed_telegram_id=allowed_id,
@@ -115,4 +133,10 @@ def load_config() -> Config:
         stt_daily_seconds_limit=stt_daily_seconds_limit,
         llm_daily_request_limit=llm_daily_request_limit,
         llm_daily_cost_usd_limit=llm_daily_cost_usd_limit,
+        backup_enabled=backup_enabled,
+        backup_telegram_chat_id=backup_telegram_chat_id,
+        backup_hour=backup_hour,
+        backup_minute=backup_minute,
+        backup_retention_days=backup_retention_days,
+        backup_dir=backup_dir,
     )
