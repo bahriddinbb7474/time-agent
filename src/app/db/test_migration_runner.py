@@ -15,6 +15,7 @@ STAGE16_3_PATH = REAL_MIGRATIONS_DIR / "20260612_0300_add_capture_drafts.sql"
 
 EXPECTED_TABLES = {
     "alert_queue",
+    "api_usage",
     "capture_drafts",
     "crisis_stack_tasks",
     "crisis_stacks",
@@ -65,11 +66,19 @@ def _assert_final_schema(
         ]
     conn = sqlite3.connect(db_path)
     try:
-        assert EXPECTED_TABLES.issubset(_table_names(conn))
+        tables_to_assert = EXPECTED_TABLES
+        if "20260614_2000_add_api_usage" not in expected_versions:
+            tables_to_assert = EXPECTED_TABLES - {"api_usage"}
+        assert tables_to_assert.issubset(_table_names(conn))
         assert "completed_at" in _columns(conn, "tasks")
         assert {"id", "plan_date", "text", "source", "created_at", "updated_at"}.issubset(
             _columns(conn, "daily_plans")
         )
+        if "20260615_1000_add_token_usage" in expected_versions:
+            assert {
+                "input_tokens", "output_tokens", "request_count",
+                "audio_seconds", "estimated_cost_usd", "status",
+            }.issubset(_columns(conn, "api_usage"))
         assert _migration_versions(conn) == expected_versions
     finally:
         conn.close()
