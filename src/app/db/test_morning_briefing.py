@@ -152,6 +152,52 @@ async def main():
             assert collected.health_lines
             assert collected.google_today_lines == []
 
+            # ── Stage 18.7.5: targets_lines integration ───────────────────────
+            assert collected.targets_lines, (
+                "targets_lines must be non-empty after seed"
+            )
+            targets_text = "\n".join(collected.targets_lines)
+            assert "Вода" in targets_text, "Default target 'Вода' must appear in morning targets"
+            assert "Сон" in targets_text, "Default target 'Сон' must appear in morning targets"
+
+            # Build a message with explicit targets_lines and verify section appears
+            message_with_targets = build_morning_briefing_message(
+                MorningBriefingInput(
+                    timed_tasks=timed,
+                    floating_tasks=floating,
+                    daily_plan_text="Deep work first.",
+                    later_count=len(later_items),
+                    prayer_lines=["• Fajr: done"],
+                    quran_lines=["• Quran: review"],
+                    health_lines=["• Siyam: ordinary day"],
+                    targets_lines=["• Вода: 3000 ml", "• Сон: 360 min"],
+                )
+            )
+            assert "Цели дня" in message_with_targets, (
+                "Morning message must contain '🎯 Цели дня' section when targets_lines provided"
+            )
+            assert "Вода: 3000 ml" in message_with_targets
+            assert "Сон: 360 min" in message_with_targets
+
+            # No-targets case: empty targets_lines → section must not appear
+            message_no_targets = build_morning_briefing_message(
+                MorningBriefingInput(
+                    timed_tasks=timed,
+                    floating_tasks=floating,
+                    prayer_lines=["• Fajr: done"],
+                    quran_lines=["• Quran: review"],
+                    # targets_lines defaults to []
+                )
+            )
+            assert "Цели дня" not in message_no_targets, (
+                "Morning message must not show targets section when targets_lines is empty"
+            )
+
+            # Existing quran/health lines are preserved
+            assert "Коран / здоровье" in message_with_targets
+            assert "Quran: review" in message_with_targets
+            assert "Siyam: ordinary day" in message_with_targets
+
         await engine.dispose()
 
     print("PASS: Morning briefing smoke test uses isolated temp SQLite DB")

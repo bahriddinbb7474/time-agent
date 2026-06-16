@@ -16,6 +16,7 @@ class MorningBriefingInput:
     prayer_lines: Sequence[str] = field(default_factory=list)
     quran_lines: Sequence[str] = field(default_factory=list)
     health_lines: Sequence[str] = field(default_factory=list)
+    targets_lines: Sequence[str] = field(default_factory=list)
 
 
 def build_morning_briefing_message(data: MorningBriefingInput) -> str:
@@ -36,6 +37,7 @@ def build_morning_briefing_message(data: MorningBriefingInput) -> str:
         "📖 Коран / здоровье",
         list(data.quran_lines) + list(data.health_lines),
     )
+    _append_text_section(lines, "🎯 Цели дня", data.targets_lines)
     _append_later_section(lines, data.later_count)
 
     return "\n".join(lines)

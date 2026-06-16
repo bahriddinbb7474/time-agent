@@ -160,6 +160,49 @@ async def main():
             assert "Google Calendar" not in message
             assert "Что главное завтра?" in message
 
+            # ── Stage 18.7.5: targets_lines integration ───────────────────────
+            # Evening message renders targets block
+            message_with_targets = build_evening_planning_message(
+                EveningPlanningInput(
+                    done_today=done_today,
+                    unfinished_tasks=timed + floating,
+                    later_items=later_items,
+                    tomorrow_tasks=tomorrow_tasks,
+                    prayer_lines=["• Fajr: done"],
+                    quran_lines=["• Quran: review"],
+                    health_lines=["• Hydration: ok"],
+                    targets_lines=[
+                        "• Вода: 2500/3000 ml — ✅ выполнено",
+                        "• Сон: нет данных",
+                        "• Коран: 0/20 pages — ⬜ нет данных",
+                    ],
+                )
+            )
+            assert "Итог дня" in message_with_targets, (
+                "Evening message must contain '🎯 Итог дня' section when targets_lines provided"
+            )
+            assert "Вода: 2500/3000 ml" in message_with_targets
+            assert "нет данных" in message_with_targets
+
+            # No-targets case: empty targets_lines → section must not appear
+            message_no_targets = build_evening_planning_message(
+                EveningPlanningInput(
+                    done_today=done_today,
+                    unfinished_tasks=timed + floating,
+                    # targets_lines defaults to []
+                )
+            )
+            assert "Итог дня" not in message_no_targets, (
+                "Evening message must not show targets section when targets_lines is empty"
+            )
+
+            # Existing quran/health/prayer lines are preserved
+            assert "Намазы" in message_with_targets
+            assert "Fajr: done" in message_with_targets
+            assert "Коран" in message_with_targets
+            assert "Quran: review" in message_with_targets
+            assert "Hydration: ok" in message_with_targets
+
             first_alert_id = await _ensure_quran_followup_alert(
                 session=session,
                 chat_id=123,

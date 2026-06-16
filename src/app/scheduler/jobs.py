@@ -109,6 +109,7 @@ async def _collect_morning_briefing_input(
         prayer_lines=await _build_prayer_status_section(session),
         quran_lines=[quran_service.build_deficit_message(quran_summary)],
         health_lines=await _build_health_status_section(session),
+        targets_lines=await _build_targets_morning_section(session),
     )
 
 
@@ -261,6 +262,7 @@ async def evening_summary(bot) -> None:
                 quran_lines=quran_lines,
                 health_lines=health_lines,
                 google_tomorrow_lines=[],
+                targets_lines=await _build_targets_evening_section(session),
             )
         )
 
@@ -988,6 +990,71 @@ async def _build_prayer_status_section(session) -> list[str]:
         else:
             lines.append(f"• {prayer_name}: {alert.status}")
 
+    return lines
+
+
+async def _build_targets_morning_section(session) -> list[str]:
+    """
+    Compact morning targets block: plan values only, no progress.
+    Seeds default targets idempotently if none exist.
+    Returns at most 6 lines to keep the briefing short.
+    """
+    from app.services.daily_targets_seed import seed_default_targets
+    from app.services.daily_targets_service import DailyTargetsService
+
+    today = datetime.now(APP_TZ).date()
+    await seed_default_targets(session)
+    service = DailyTargetsService(session)
+    active = await service.list_active_targets_for_date(today)
+    if not active:
+        return []
+    return [f"• {t.title}: {t.target_value:g} {t.unit}" for t in active[:6]]
+
+
+_TARGET_STATUS_EMOJI: dict[str, str] = {
+    "no_data": "⬜",
+    "in_progress": "🔵",
+    "partial": "🟡",
+    "reached": "✅",
+    "exceeded": "⚠️",
+}
+_TARGET_STATUS_LABEL: dict[str, str] = {
+    "no_data": "нет данных",
+    "in_progress": "в процессе",
+    "partial": "частично",
+    "reached": "выполнено",
+    "exceeded": "превышено",
+}
+
+
+async def _build_targets_evening_section(session) -> list[str]:
+    """
+    Evening targets block: fact/plan/status for each active goal.
+    Shows 'нет данных' (not '0') when progress row is absent.
+    Does not seed — targets must already exist.
+    """
+    from app.services.daily_targets_service import DailyTargetsService
+
+    today = datetime.now(APP_TZ).date()
+    service = DailyTargetsService(session)
+    summary = await service.get_summary_for_date(today)
+    if not summary:
+        return []
+
+    lines: list[str] = []
+    for row in summary:
+        defn = row.definition
+        prog = row.progress
+        if prog is None:
+            lines.append(f"• {defn.title}: нет данных")
+        else:
+            status = prog.status
+            emoji = _TARGET_STATUS_EMOJI.get(status, "")
+            label = _TARGET_STATUS_LABEL.get(status, status)
+            lines.append(
+                f"• {defn.title}: {prog.actual_value:g}/{prog.planned_value_snapshot:g}"
+                f" {defn.unit} — {emoji} {label}"
+            )
     return lines
 
 

@@ -16,6 +16,7 @@ class EveningPlanningInput:
     quran_lines: Sequence[str] = field(default_factory=list)
     health_lines: Sequence[str] = field(default_factory=list)
     google_tomorrow_lines: Sequence[str] = field(default_factory=list)
+    targets_lines: Sequence[str] = field(default_factory=list)
 
 
 def build_evening_planning_message(data: EveningPlanningInput) -> str:
@@ -26,6 +27,7 @@ def build_evening_planning_message(data: EveningPlanningInput) -> str:
     _append_text_section(lines, "🕋 Намазы", data.prayer_lines)
     _append_text_section(lines, "📖 Коран", data.quran_lines)
     _append_text_section(lines, "💧 Здоровье/сиям", data.health_lines)
+    _append_text_section(lines, "🎯 Итог дня", data.targets_lines)
 
     _append_done_today_section(lines, data.done_today)
     _append_focus_section(lines, data.unfinished_tasks)
