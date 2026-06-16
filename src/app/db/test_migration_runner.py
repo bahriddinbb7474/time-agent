@@ -21,6 +21,8 @@ EXPECTED_TABLES = {
     "crisis_stacks",
     "daily_health_contexts",
     "daily_plans",
+    "daily_target_definitions",
+    "daily_target_progress",
     "oauth_states",
     "prayer_times",
     "quran_progress",
@@ -68,7 +70,12 @@ def _assert_final_schema(
     try:
         tables_to_assert = EXPECTED_TABLES
         if "20260614_2000_add_api_usage" not in expected_versions:
-            tables_to_assert = EXPECTED_TABLES - {"api_usage"}
+            tables_to_assert = tables_to_assert - {"api_usage"}
+        if "20260616_0000_add_daily_targets" not in expected_versions:
+            tables_to_assert = tables_to_assert - {
+                "daily_target_definitions",
+                "daily_target_progress",
+            }
         assert tables_to_assert.issubset(_table_names(conn))
         assert "completed_at" in _columns(conn, "tasks")
         assert {"id", "plan_date", "text", "source", "created_at", "updated_at"}.issubset(
@@ -79,6 +86,16 @@ def _assert_final_schema(
                 "input_tokens", "output_tokens", "request_count",
                 "audio_seconds", "estimated_cost_usd", "status",
             }.issubset(_columns(conn, "api_usage"))
+        if "20260616_0000_add_daily_targets" in expected_versions:
+            assert {
+                "id", "title", "category", "unit", "target_value",
+                "target_mode", "priority", "weekdays_mask", "active",
+                "created_at", "updated_at",
+            }.issubset(_columns(conn, "daily_target_definitions"))
+            assert {
+                "id", "target_id", "usage_date", "planned_value_snapshot",
+                "actual_value", "status", "note", "updated_at",
+            }.issubset(_columns(conn, "daily_target_progress"))
         assert _migration_versions(conn) == expected_versions
     finally:
         conn.close()
@@ -90,6 +107,7 @@ _ALL_REAL_VERSIONS = [
     "20260612_0300_add_capture_drafts",
     "20260614_2000_add_api_usage",
     "20260615_1000_add_token_usage",
+    "20260616_0000_add_daily_targets",
 ]
 
 

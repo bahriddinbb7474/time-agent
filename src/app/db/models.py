@@ -500,3 +500,58 @@ class ApiUsageRecord(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="success")
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class DailyTargetDefinition(Base):
+    __tablename__ = "daily_target_definitions"
+    __table_args__ = (
+        Index("ix_daily_target_definitions_active", "active"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), nullable=False, default="general")
+    unit: Mapped[str] = mapped_column(String(16), nullable=False)
+    target_value: Mapped[float] = mapped_column(Float, nullable=False)
+    target_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="minimum")
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    weekdays_mask: Mapped[int] = mapped_column(Integer, nullable=False, default=127)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    progress_entries: Mapped[list["DailyTargetProgress"]] = relationship(
+        "DailyTargetProgress",
+        back_populates="target",
+        cascade="all, delete-orphan",
+    )
+
+
+class DailyTargetProgress(Base):
+    __tablename__ = "daily_target_progress"
+    __table_args__ = (
+        UniqueConstraint(
+            "target_id",
+            "usage_date",
+            name="uq_daily_target_progress_target_date",
+        ),
+        Index("ix_daily_target_progress_usage_date", "usage_date"),
+        Index("ix_daily_target_progress_target_id", "target_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    target_id: Mapped[int] = mapped_column(
+        ForeignKey("daily_target_definitions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False)
+    planned_value_snapshot: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_progress")
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    target: Mapped["DailyTargetDefinition"] = relationship(
+        "DailyTargetDefinition",
+        back_populates="progress_entries",
+    )
