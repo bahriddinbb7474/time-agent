@@ -183,14 +183,14 @@ class TaskService:
         if user_id is None:
             return
 
-        urgent_tasks_count = await self._count_open_urgent_tasks(user_id=user_id)
+        urgent_tasks_count = await self._count_open_urgent_tasks()
         if urgent_tasks_count < 2:
             return
 
         CrisisStackService().activate_crisis_mode(user_id)
         log.info("Crisis stack activated urgent_tasks=%s", urgent_tasks_count)
 
-    async def _count_open_urgent_tasks(self, *, user_id: int) -> int:
+    async def _count_open_urgent_tasks(self) -> int:
         stmt = select(Task).where(Task.status == "todo")
         result = await self.session.execute(stmt)
         tasks = result.scalars().all()

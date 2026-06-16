@@ -121,7 +121,7 @@ async def main():
             assert not hasattr(Task, "user_id")
 
             task_service = TaskService(session)
-            assert await task_service._count_open_urgent_tasks(user_id=123456789) == 2
+            assert await task_service._count_open_urgent_tasks() == 2
 
             activated_user_ids = []
             original_activate = CrisisStackService.activate_crisis_mode
