@@ -5,20 +5,24 @@
 
 ## Current Stage
 
-- Current: Stage 18.6-C0 — not started.
-- Previous: Stage 18.6-P — production PASS.
-- Stage 18.6-P: CLOSED / PRODUCTION PASS.
-- Production code HEAD at smoke: `fd23d87`.
-- Repository HEAD before v8.1 docs update: `41fd89c`.
-
-This v8.1 update is a plan/documentation adoption only. It does not implement new runtime features and does not start Stage 18.7.
+- 18.6-C0: CLOSED / PRODUCTION PASS.
+- 18.6-C: CLOSED / PRODUCTION PASS.
+- 18.6-D: CLOSED / PRODUCTION PASS.
+- PRE-18.7-A: CLOSED / read-only audit PASS.
+- PRE-18.7-B: CLOSED / pushed (`1e81d73` — dead crisis user_id param removed).
+- PRE-18.7-C: current — docs/status cleanup.
+- Production HEAD (last deployed): `2c9b47e`.
+- Repository HEAD: `1e81d73`.
 
 ## Current Route
 
-- 18.6-C0: token fields.
-- 18.6-C: `/usage`.
-- 18.6-D: hard limits.
-- PRE-18.7 / PRE-19: audits and fixes.
+- 18.6-C0: DONE / production PASS.
+- 18.6-C: DONE / production PASS.
+- 18.6-D: DONE / production PASS.
+- PRE-18.7-A: DONE / audit PASS.
+- PRE-18.7-B: DONE / pushed.
+- PRE-18.7-C: current — docs cleanup.
+- Remaining before 18.7: Telegram nightly backup (HIGH/OPEN), single-instance PID guard decision, optional migration test coverage gap.
 - 18.7: Daily Targets MVP.
 - 19: LLM Capture Intelligence.
 - 20: Daily Control 24/7.

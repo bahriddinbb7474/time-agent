@@ -18,17 +18,18 @@ Current short snapshot: `TZ_CURRENT_SHORT.md`.
 
 ## Current Status
 
-- Stage 18.6-P: CLOSED / PRODUCTION PASS.
-- Production code HEAD at smoke: `fd23d87`.
-- Repository HEAD before v8.1 docs update: `41fd89c`.
-- Current next stage: Stage 18.6-C0.
+- 18.6-C0 / 18.6-C / 18.6-D: CLOSED / PRODUCTION PASS.
+- PRE-18.7-A/B: CLOSED / audit and crisis fix done.
+- PRE-18.7-C: current — docs cleanup.
+- Production HEAD (last deployed): `2c9b47e`.
+- Repository HEAD: `1e81d73`.
 
 ## Current Route
 
-- 18.6-C0: token fields.
-- 18.6-C: `/usage`.
-- 18.6-D: hard limits.
-- PRE-18.7 / PRE-19: audits and fixes.
+- 18.6-C0: DONE.
+- 18.6-C: DONE.
+- 18.6-D: DONE.
+- PRE-18.7: audits and fixes (in progress).
 - 18.7: Daily Targets MVP.
 - 19: LLM Capture Intelligence.
 - 20: Daily Control 24/7.

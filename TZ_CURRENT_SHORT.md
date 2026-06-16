@@ -5,15 +5,19 @@
 
 ## Current State
 
-- Stage 18.6-P: CLOSED / PRODUCTION PASS.
-- Production code HEAD at smoke: `fd23d87`.
-- Repository HEAD before v8.1 docs update: `41fd89c`.
-- Current next stage: Stage 18.6-C0.
+- 18.6-C0: CLOSED / PRODUCTION PASS.
+- 18.6-C: CLOSED / PRODUCTION PASS.
+- 18.6-D: CLOSED / PRODUCTION PASS.
+- PRE-18.7-A: CLOSED / audit PASS.
+- PRE-18.7-B: CLOSED / pushed (`1e81d73` — dead crisis user_id param removed).
+- PRE-18.7-C: current — docs cleanup.
+- Production HEAD (last deployed): `2c9b47e`.
+- Repository HEAD: `1e81d73`.
 - Stage 18.7 is not started.
 
 ## Route
 
-`18.6-C0 -> 18.6-C /usage -> 18.6-D hard limits -> audits -> 18.7 Daily Targets MVP -> 19 LLM Capture Intelligence -> 20 Daily Control 24/7 -> 21 Task Lifecycle -> 22 Production hardening + main DoD -> 23 Idea Vault -> 24 Statistics & Forecasting`
+`[DONE] 18.6-C0 -> 18.6-C -> 18.6-D -> PRE-18.7-A/B/C -> [OPEN] Telegram backup (HIGH) -> single-instance guard decision -> 18.7 Daily Targets MVP -> 19 LLM Capture Intelligence -> 20 Daily Control 24/7 -> 21 Task Lifecycle -> 22 Production hardening + main DoD -> 23 Idea Vault -> 24 Statistics & Forecasting`
 
 ## Key Decisions
 

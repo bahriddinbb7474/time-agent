@@ -9,10 +9,13 @@ Time-Agent is a Telegram bot for personal mental-load dispatching with context-a
 
 ## Current Route
 
-- 18.6-C0: token fields.
-- 18.6-C: `/usage`.
-- 18.6-D: hard limits.
-- PRE-18.7 / PRE-19: audits and fixes.
+- 18.6-C0: DONE / production PASS.
+- 18.6-C: DONE / production PASS.
+- 18.6-D: DONE / production PASS.
+- PRE-18.7-A: DONE / audit PASS.
+- PRE-18.7-B: DONE / pushed.
+- PRE-18.7-C: current — docs cleanup.
+- Remaining before 18.7: Telegram nightly backup (HIGH/OPEN), single-instance PID guard decision.
 - 18.7: Daily Targets MVP; does not depend on LLM and depends on completed audits/migration foundation.
 - 19: LLM Capture Intelligence.
 - 20: Daily Control 24/7; depends on Stage 19.
@@ -36,40 +39,36 @@ time-agent/
 │  │  ├─ task_lifecycle.py            # /edit and /delete
 │  │  ├─ today.py                     # /today, /siyam_on, /siyam_off
 │  │  ├─ rules.py                     # /rules
-│  │  ├─ gcal.py                      # /gcal_* commands and conflict callbacks
+│  │  ├─ capture.py                   # Voice and text capture drafts
+│  │  ├─ usage.py                     # /usage API stats command
 │  │  └─ quran.py                     # /quran and /quran_status
 │  ├─ services/                       # Business logic
 │  │  ├─ task_service.py              # Local task CRUD facade and context status
-│  │  ├─ task_sync_service.py         # Local task plus Google sync orchestration
-│  │  ├─ task_sync_policy_service.py  # Category-based sync policy
 │  │  ├─ context_validator.py         # Read-only scheduling validation
 │  │  ├─ prayer_times_service.py      # Aladhan Tashkent Hanafi prayer cache
 │  │  ├─ daily_context_service.py     # Siyam/health daily policy
 │  │  ├─ quran_service.py             # Quran progress and daily goal logic
 │  │  ├─ family_contact_service.py    # Family reminder candidates
 │  │  ├─ boss_priority_service.py     # Boss/critical alert decisions
-│  │  └─ google_*_service.py          # Calendar service and reconciliation
+│  │  ├─ api_limit_service.py         # Daily API hard limits (Stage 18.6-D)
+│  │  └─ api_usage_service.py         # API usage recording and aggregation
 │  ├─ scheduler/
 │  │  ├─ scheduler.py                 # APScheduler setup and alert recovery
 │  │  └─ jobs.py                      # Briefings, prayer cache, alert firing
 │  ├─ db/
 │  │  ├─ models.py                    # SQLAlchemy ORM models
 │  │  ├─ crud.py                      # Core CRUD helpers
-│  │  ├─ *_repo.py                    # OAuth and external link repositories
+│  │  ├─ *_repo.py                    # Legacy OAuth and external link repositories (GCal removed; tables kept pending final cleanup)
 │  │  ├─ database.py                  # SQLite async engine/sessionmaker
 │  │  ├─ middleware.py                # DB session middleware for aiogram
 │  │  └─ seed.py                      # Default rules and routines
 │  └─ integrations/google/
-│     ├─ auth.py                      # OAuth credentials, token, scopes
-│     ├─ calendar_client.py           # Google Calendar API calls
-│     ├─ oauth_server.py              # Local OAuth callback server
-│     ├─ dto.py                       # Google DTOs
-│     └─ mappers.py                   # Integration mapping helpers
+│     └─ (source files removed in Stage 16a; __pycache__ only — final cleanup postponed)
 ├─ data/                              # Local SQLite database path
 ├─ logs/                              # Runtime logs
 ├─ secrets/                           # Local secrets folder
 ├─ Dockerfile                         # Python 3.11 slim container
-├─ docker-compose.yml                 # Bot service, logs/data volumes, OAuth port
+├─ docker-compose.yml                 # Bot service, logs/data volumes (no OAuth port)
 ├─ requirements.txt                   # Python dependencies
 ├─ AGENTS.md                          # Local Codex/project instructions
 ├─ STAGE_SNAPSHOT.md                  # Development workflow snapshot
@@ -91,8 +90,8 @@ time-agent/
 
 - `Rule`: protected slots.
 - `Task`: local tasks with category, status, planned time, and context status.
-- `TaskExternalLink`: Google Calendar sync state.
-- `OAuthState`: Google OAuth PKCE state.
+- `TaskExternalLink`: legacy GCal sync state (GCal runtime removed; table kept pending final cleanup stage).
+- `OAuthState`: legacy GCal OAuth PKCE state (same — table kept pending final cleanup stage).
 - `UserRoutine`: sleep and second-sleep routines.
 - `PrayerTime`: cached daily prayer times.
 - `AlertQueue`: persistent reminders.
@@ -105,5 +104,5 @@ time-agent/
 
 - `requirements.txt`: pinned runtime dependencies.
 - `Dockerfile`: runs `python -m app.main` with `PYTHONPATH=/app/src`.
-- `docker-compose.yml`: mounts logs and app data, exposes port `8085` for OAuth callback.
+- `docker-compose.yml`: mounts logs and app data volumes. No OAuth port exposed (GCal runtime removed).
 - `.env.example`: placeholder-only runtime configuration.
