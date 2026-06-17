@@ -344,6 +344,110 @@ async def test_record_llm_limit_exceeded_via_record():
     print("PASS: test_record_llm_limit_exceeded_via_record")
 
 
+# ─── Stage 19.2 — advisor intent + confidence (sync) ─────────────────────────
+
+
+def test_classify_help_bot_usage_phrase():
+    draft = CaptureRouterService().classify_text("как пользоваться ботом")
+    assert draft.advisor_intent == "help", f"got {draft.advisor_intent!r}"
+    assert draft.kind == CAPTURE_KIND_LATER, f"got {draft.kind!r}"
+    print("PASS: test_classify_help_bot_usage_phrase")
+
+
+def test_classify_help_commands_phrase():
+    draft = CaptureRouterService().classify_text("какие команды есть")
+    assert draft.advisor_intent == "help", f"got {draft.advisor_intent!r}"
+    print("PASS: test_classify_help_commands_phrase")
+
+
+def test_classify_help_has_later_kind_and_rules_help_reason_code():
+    for phrase in ["что ты умеешь", "инструкция", "помоги настроить приложение"]:
+        draft = CaptureRouterService().classify_text(phrase)
+        assert draft.advisor_intent == "help", f"phrase={phrase!r}: got advisor_intent={draft.advisor_intent!r}"
+        assert draft.kind == CAPTURE_KIND_LATER, f"phrase={phrase!r}: got kind={draft.kind!r}"
+        assert draft.reason_code == "rules_help", f"phrase={phrase!r}: got reason_code={draft.reason_code!r}"
+        assert draft.confidence == 1.0, f"phrase={phrase!r}: got confidence={draft.confidence}"
+    print("PASS: test_classify_help_has_later_kind_and_rules_help_reason_code")
+
+
+def test_classify_settings_modify_goal_phrase():
+    draft = CaptureRouterService().classify_text("измени цель вода")
+    assert draft.advisor_intent == "settings", f"got {draft.advisor_intent!r}"
+    assert draft.kind == CAPTURE_KIND_LATER, f"got {draft.kind!r}"
+    print("PASS: test_classify_settings_modify_goal_phrase")
+
+
+def test_classify_settings_water_quantity_pattern():
+    # "хочу N литра/литров" triggers quantity-based settings detection
+    draft = CaptureRouterService().classify_text("хочу 2 литра воды")
+    assert draft.advisor_intent == "settings", f"got {draft.advisor_intent!r}"
+    assert draft.kind == CAPTURE_KIND_LATER
+    print("PASS: test_classify_settings_water_quantity_pattern")
+
+
+def test_classify_settings_sleep_phrase():
+    draft = CaptureRouterService().classify_text("настрой сон 7 часов")
+    assert draft.advisor_intent == "settings", f"got {draft.advisor_intent!r}"
+    print("PASS: test_classify_settings_sleep_phrase")
+
+
+def test_classify_settings_disable_phrase():
+    draft = CaptureRouterService().classify_text("отключи английский")
+    assert draft.advisor_intent == "settings", f"got {draft.advisor_intent!r}"
+    print("PASS: test_classify_settings_disable_phrase")
+
+
+def test_classify_settings_has_later_kind_and_rules_settings_reason_code():
+    for phrase in ["добавь цель", "установи цель питание", "хочу настроить цели"]:
+        draft = CaptureRouterService().classify_text(phrase)
+        assert draft.advisor_intent == "settings", f"phrase={phrase!r}: got {draft.advisor_intent!r}"
+        assert draft.kind == CAPTURE_KIND_LATER, f"phrase={phrase!r}: got {draft.kind!r}"
+        assert draft.reason_code == "rules_settings", f"phrase={phrase!r}: got {draft.reason_code!r}"
+        assert draft.confidence == 1.0, f"phrase={phrase!r}: got {draft.confidence}"
+    print("PASS: test_classify_settings_has_later_kind_and_rules_settings_reason_code")
+
+
+def test_classify_short_text_is_unknown_intent():
+    for short in ["а", "ок", "хм"]:
+        draft = CaptureRouterService().classify_text(short)
+        assert draft.advisor_intent == "unknown", (
+            f"short text {short!r}: expected unknown, got {draft.advisor_intent!r}"
+        )
+        assert draft.kind == CAPTURE_KIND_LATER, f"short text {short!r}: got {draft.kind!r}"
+        assert draft.reason_code == "rules_unknown", f"short text {short!r}: got {draft.reason_code!r}"
+    print("PASS: test_classify_short_text_is_unknown_intent")
+
+
+def test_classify_unknown_needs_clarification_and_low_confidence():
+    draft = CaptureRouterService().classify_text("да")
+    assert draft.needs_clarification is True, f"expected True, got {draft.needs_clarification}"
+    assert draft.confidence < 1.0, f"expected < 1.0, got {draft.confidence}"
+    print("PASS: test_classify_unknown_needs_clarification_and_low_confidence")
+
+
+def test_classify_slash_command_not_treated_as_help():
+    # "/help" starts with "/" → IGNORE, must not go through help detection
+    draft = CaptureRouterService().classify_text("/help")
+    assert draft.kind == CAPTURE_KIND_IGNORE, f"got {draft.kind!r}"
+    assert draft.advisor_intent == "capture", f"got {draft.advisor_intent!r}"
+    assert draft.reason_code == "rules_ignore"
+    print("PASS: test_classify_slash_command_not_treated_as_help")
+
+
+def test_classify_target_progress_stays_capture_intent():
+    # Target progress phrases reach capture router only if targets_router misses them.
+    # They must never be classified as settings — no "хочу" + unit combination present.
+    for phrase in ["Вода +500 мл", "Сон 7 часов", "Английский 20 минут", "выпил воды"]:
+        draft = CaptureRouterService().classify_text(phrase)
+        assert draft.advisor_intent in ("capture", "unknown"), (
+            f"phrase={phrase!r}: expected capture/unknown, got {draft.advisor_intent!r}"
+        )
+        assert draft.advisor_intent != "settings", (
+            f"phrase={phrase!r}: target progress must not classify as settings"
+        )
+    print("PASS: test_classify_target_progress_stays_capture_intent")
+
+
 # ─── runner ───────────────────────────────────────────────────────────────────
 
 
@@ -364,6 +468,19 @@ SYNC_TESTS = [
     test_classify_advisor_intent_always_capture,
     test_record_llm_signature_has_no_private_params,
     test_record_llm_signature_has_expected_params,
+    # Stage 19.2
+    test_classify_help_bot_usage_phrase,
+    test_classify_help_commands_phrase,
+    test_classify_help_has_later_kind_and_rules_help_reason_code,
+    test_classify_settings_modify_goal_phrase,
+    test_classify_settings_water_quantity_pattern,
+    test_classify_settings_sleep_phrase,
+    test_classify_settings_disable_phrase,
+    test_classify_settings_has_later_kind_and_rules_settings_reason_code,
+    test_classify_short_text_is_unknown_intent,
+    test_classify_unknown_needs_clarification_and_low_confidence,
+    test_classify_slash_command_not_treated_as_help,
+    test_classify_target_progress_stays_capture_intent,
 ]
 
 ASYNC_TESTS = [
@@ -384,7 +501,7 @@ def main() -> None:
     for fn in SYNC_TESTS:
         fn()
     asyncio.run(main_async())
-    print("\nALL 21 TESTS PASSED")
+    print("\nALL 33 TESTS PASSED")
 
 
 if __name__ == "__main__":
