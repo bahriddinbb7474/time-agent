@@ -243,7 +243,14 @@ async def _validate_task_like(
                 msg = ctx_result.message or "Конфликт с расписанием. Уточните время."
                 return _invalid(proposal, reason_code=reason, user_message=msg)
         except Exception:
+            # Fail closed: context validators (prayer/sleep/rules) override LLM.
+            # If the check cannot complete, the proposal must not proceed.
             log.warning("Context validation failed for advisor proposal", exc_info=True)
+            return _invalid(
+                proposal,
+                reason_code="context_validator_error",
+                user_message="Не смог безопасно проверить время. Уточните, пожалуйста.",
+            )
 
     # Build validated safe proposal — enforce confirmation, strip settings fields
     safe = AdvisorProposal(

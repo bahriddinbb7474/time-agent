@@ -271,6 +271,22 @@ async def test_context_validator_not_called_when_no_when_text():
     print("PASS: test_context_validator_not_called_when_no_when_text")
 
 
+async def test_context_validator_exception_fails_closed():
+    """If context_validator.validate_event raises, the proposal must NOT pass through."""
+    cv = MagicMock()
+    cv.validate_event = AsyncMock(side_effect=RuntimeError("db connection lost"))
+    p = _proposal(proposal_type="task", title="Задача", when_text=_FUTURE_WHEN_TEXT)
+    result = await validate_advisor_proposal(p, now_dt=_NOW_DT, context_validator=cv)
+    assert result.valid is False, "validator exception must close the proposal"
+    assert result.needs_clarification is True
+    assert result.reason_code == "context_validator_error"
+    assert result.safe_proposal.proposal_type == "clarification"
+    assert result.safe_proposal.needs_confirmation is False
+    assert result.safe_proposal.title is None
+    cv.validate_event.assert_called_once()
+    print("PASS: test_context_validator_exception_fails_closed")
+
+
 async def test_settings_valid_passes_as_proposal_only():
     p = _proposal(
         proposal_type="settings_change",
@@ -457,6 +473,7 @@ ALL_TESTS = [
     test_sleep_conflict_warning_also_invalidates_task,
     test_no_conflict_with_cv_passes,
     test_context_validator_not_called_when_no_when_text,
+    test_context_validator_exception_fails_closed,
     test_settings_valid_passes_as_proposal_only,
     test_settings_missing_target_name_fails,
     test_settings_empty_target_name_fails,
@@ -480,7 +497,7 @@ def main() -> None:
             await fn()
 
     asyncio.run(_run_all())
-    print(f"\nALL {len(ALL_TESTS)} TESTS PASSED")
+    print(f"\nALL {len(ALL_TESTS)} TESTS PASSED")  # 31
 
 
 if __name__ == "__main__":
