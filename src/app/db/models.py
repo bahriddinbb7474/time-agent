@@ -146,6 +146,8 @@ class CaptureDraftRecord(Base):
         default="pending",
     )
 
+    advisor_proposal_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 
 class CrisisStack(Base):
     __tablename__ = "crisis_stacks"

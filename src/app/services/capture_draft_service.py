@@ -31,6 +31,7 @@ class CaptureDraftService:
         draft: CaptureDraft,
         source: str = CAPTURE_DRAFT_SOURCE_TEXT,
         transcript: str | None = None,
+        advisor_proposal_json: str | None = None,
         now: datetime | None = None,
     ) -> CaptureDraftRecord:
         created_at = now or _utc_now()
@@ -44,6 +45,7 @@ class CaptureDraftService:
             created_at=created_at,
             expires_at=created_at + CAPTURE_DRAFT_TTL,
             status=CAPTURE_DRAFT_STATUS_PENDING,
+            advisor_proposal_json=advisor_proposal_json,
         )
         self.session.add(record)
         await self.session.commit()
