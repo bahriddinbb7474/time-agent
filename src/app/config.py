@@ -21,6 +21,7 @@ class Config:
     openrouter_api_key: str
     openrouter_stt_model: str
     openrouter_stt_language: str
+    openrouter_advisor_model: str
     # Stage 18.6-D: hard limits (0 = unlimited per canonical TZ)
     stt_daily_request_limit: int
     stt_daily_seconds_limit: int
@@ -88,6 +89,9 @@ def load_config() -> Config:
         os.getenv("OPENROUTER_STT_MODEL", "").strip() or "openai/whisper-large-v3"
     )
     openrouter_stt_language = os.getenv("OPENROUTER_STT_LANGUAGE", "").strip()
+    openrouter_advisor_model = (
+        os.getenv("OPENROUTER_ADVISOR_MODEL", "").strip() or "openai/gpt-4o-mini"
+    )
 
     stt_daily_request_limit = _parse_limit_int(
         "STT_DAILY_REQUEST_LIMIT",
@@ -129,6 +133,7 @@ def load_config() -> Config:
         openrouter_api_key=openrouter_api_key,
         openrouter_stt_model=openrouter_stt_model,
         openrouter_stt_language=openrouter_stt_language,
+        openrouter_advisor_model=openrouter_advisor_model,
         stt_daily_request_limit=stt_daily_request_limit,
         stt_daily_seconds_limit=stt_daily_seconds_limit,
         llm_daily_request_limit=llm_daily_request_limit,
