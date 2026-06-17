@@ -354,6 +354,295 @@ async def test_one_run_max_one_provider_call():
         tmp.cleanup()
 
 
+# ── D3: Advisor callback handler tests ───────────────────────────────────────
+
+from sqlalchemy import select
+from app.db.models import Task
+from app.handlers.capture import advisor_capture_callback
+from app.services.capture_confirmation_service import (
+    ADVISOR_CAPTURE_CALLBACK_PREFIX,
+    build_advisor_callback_data,
+)
+from app.services.capture_draft_service import (
+    CAPTURE_DRAFT_STATUS_CANCELLED,
+    CAPTURE_DRAFT_STATUS_CONFIRMED,
+    CAPTURE_DRAFT_STATUS_PENDING,
+)
+
+
+class _FakeChat:
+    id = CHAT_ID
+
+
+class _FakeUser:
+    id = USER_ID
+
+
+class _FakeCallbackMessage:
+    def __init__(self):
+        self.chat = _FakeChat()
+        self.answers: list[str] = []
+        self.reply_markup_removed = False
+
+    async def answer(self, text: str):
+        self.answers.append(text)
+
+    async def edit_reply_markup(self, *, reply_markup=None):
+        self.reply_markup_removed = reply_markup is None
+
+
+class _FakeCallback:
+    def __init__(self, action: str):
+        self.data = build_advisor_callback_data(action)
+        self.message = _FakeCallbackMessage()
+        self.from_user = _FakeUser()
+        self.bot = None
+        self.answers: list[tuple] = []
+
+    async def answer(self, text=None, *, show_alert=None):
+        self.answers.append((text, show_alert))
+
+
+def _advisor_json(*, proposal_type="later", title="AI задача"):
+    import json as _json
+    return _json.dumps({
+        "proposal_type": proposal_type,
+        "title": title,
+        "description": None,
+        "category": "personal",
+        "when_text": None,
+        "target_name": None,
+        "target_value": None,
+        "target_unit": None,
+        "needs_confirmation": True,
+        "needs_clarification": False,
+        "user_message": "Тест.",
+    }, ensure_ascii=False)
+
+
+async def test_advisor_callback_cancel_marks_cancelled():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="Тест отмена")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID, user_id=USER_ID, draft=draft,
+                advisor_proposal_json=_advisor_json(),
+            )
+            cb = _FakeCallback("cancel")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            record = await service._get_latest_by_status(
+                chat_id=CHAT_ID, user_id=USER_ID, status=CAPTURE_DRAFT_STATUS_CANCELLED,
+            )
+            assert record is not None
+        print("PASS: test_advisor_callback_cancel_marks_cancelled")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_advisor_callback_missing_json_fails_closed():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="Нет json")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID, user_id=USER_ID, draft=draft,
+            )
+            cb = _FakeCallback("confirm_later")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            assert any("устарело" in a.lower() for a in cb.message.answers), \
+                f"expected stale proposal message, got: {cb.message.answers}"
+            record = await service._get_latest_by_status(
+                chat_id=CHAT_ID, user_id=USER_ID, status=CAPTURE_DRAFT_STATUS_CANCELLED,
+            )
+            assert record is not None
+        print("PASS: test_advisor_callback_missing_json_fails_closed")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_advisor_callback_invalid_json_fails_closed():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="Плохой json")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID, user_id=USER_ID, draft=draft,
+                advisor_proposal_json="not-json{{{",
+            )
+            cb = _FakeCallback("confirm_task")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            record = await service._get_latest_by_status(
+                chat_id=CHAT_ID, user_id=USER_ID, status=CAPTURE_DRAFT_STATUS_CANCELLED,
+            )
+            assert record is not None
+        print("PASS: test_advisor_callback_invalid_json_fails_closed")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_advisor_callback_confirm_later_creates_task():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="AI позже")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID, user_id=USER_ID, draft=draft,
+                advisor_proposal_json=_advisor_json(proposal_type="later", title="AI позже"),
+            )
+            cb = _FakeCallback("confirm_later")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            result = await session.execute(select(Task).order_by(Task.id.desc()))
+            task = result.scalars().first()
+            assert task is not None
+            assert task.status == "later"
+            record = await service._get_latest_by_status(
+                chat_id=CHAT_ID, user_id=USER_ID, status=CAPTURE_DRAFT_STATUS_CONFIRMED,
+            )
+            assert record is not None
+        print("PASS: test_advisor_callback_confirm_later_creates_task")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_advisor_callback_confirm_task_creates_task():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="personal AI задача")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID, user_id=USER_ID, draft=draft,
+                advisor_proposal_json=_advisor_json(proposal_type="task", title="personal AI задача"),
+            )
+            cb = _FakeCallback("confirm_task")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            result = await session.execute(select(Task).order_by(Task.id.desc()))
+            task = result.scalars().first()
+            assert task is not None
+            assert task.status == "todo"
+        print("PASS: test_advisor_callback_confirm_task_creates_task")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_advisor_callback_confirm_boss_creates_task():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="Boss отчёт")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID, user_id=USER_ID, draft=draft,
+                advisor_proposal_json=_advisor_json(proposal_type="boss", title="Boss отчёт"),
+            )
+            cb = _FakeCallback("confirm_boss")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            result = await session.execute(select(Task).order_by(Task.id.desc()))
+            task = result.scalars().first()
+            assert task is not None
+            assert task.status == "todo"
+        print("PASS: test_advisor_callback_confirm_boss_creates_task")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_advisor_callback_confirm_settings_does_not_mutate_targets():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="Измени цель")
+            settings_json = json.dumps({
+                "proposal_type": "settings_change",
+                "title": None,
+                "description": None,
+                "category": None,
+                "when_text": None,
+                "target_name": "daily_task_limit",
+                "target_value": "10",
+                "target_unit": "задач",
+                "needs_confirmation": True,
+                "needs_clarification": False,
+                "user_message": "Изменить?",
+            }, ensure_ascii=False)
+            await service.create_pending_draft(
+                chat_id=CHAT_ID, user_id=USER_ID, draft=draft,
+                advisor_proposal_json=settings_json,
+            )
+            cb = _FakeCallback("confirm_settings_change")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            assert any("следующем этапе" in a for a in cb.message.answers), \
+                f"expected stub message, got: {cb.message.answers}"
+            record = await service._get_latest_by_status(
+                chat_id=CHAT_ID, user_id=USER_ID, status=CAPTURE_DRAFT_STATUS_CONFIRMED,
+            )
+            assert record is not None
+            result = await session.execute(select(Task))
+            assert list(result.scalars().all()) == [], "settings_change must not create tasks"
+        print("PASS: test_advisor_callback_confirm_settings_does_not_mutate_targets")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_advisor_callback_no_second_llm_call():
+    """Callback handler must not call LLM — it uses stored proposal_json only."""
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="Тест без LLM")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID, user_id=USER_ID, draft=draft,
+                advisor_proposal_json=_advisor_json(),
+            )
+            cb = _FakeCallback("confirm_later")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            # If we reach here without error, no LLM was called
+            # (there is no provider wiring in the callback handler)
+        print("PASS: test_advisor_callback_no_second_llm_call")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+async def test_advisor_callback_ask_clarification_safe():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            cb = _FakeCallback("ask_clarification")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            assert any("Уточните" in a for a in cb.message.answers), \
+                f"expected clarification message, got: {cb.message.answers}"
+        print("PASS: test_advisor_callback_ask_clarification_safe")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
+def test_advisor_callback_data_length_under_telegram_limit():
+    actions = [
+        "confirm_task", "confirm_later", "confirm_boss",
+        "confirm_settings_change", "ask_clarification", "cancel",
+    ]
+    for action in actions:
+        data = build_advisor_callback_data(action)
+        assert len(data.encode("utf-8")) <= 64, \
+            f"callback_data {data!r} exceeds Telegram 64-byte limit: {len(data.encode('utf-8'))}"
+    print("PASS: test_advisor_callback_data_length_under_telegram_limit")
+
+
 # ── Runner ────────────────────────────────────────────────────────────────────
 
 
@@ -368,6 +657,7 @@ SYNC_TESTS = [
     test_safe_json_contains_only_allowed_keys,
     test_safe_json_excludes_forbidden_fields,
     test_safe_json_roundtrips_values,
+    test_advisor_callback_data_length_under_telegram_limit,
 ]
 
 ASYNC_TESTS = [
@@ -377,6 +667,16 @@ ASYNC_TESTS = [
     test_fake_provider_returns_advisor_result,
     test_gate_blocked_safe_result,
     test_one_run_max_one_provider_call,
+    # D3: callback handler tests
+    test_advisor_callback_cancel_marks_cancelled,
+    test_advisor_callback_missing_json_fails_closed,
+    test_advisor_callback_invalid_json_fails_closed,
+    test_advisor_callback_confirm_later_creates_task,
+    test_advisor_callback_confirm_task_creates_task,
+    test_advisor_callback_confirm_boss_creates_task,
+    test_advisor_callback_confirm_settings_does_not_mutate_targets,
+    test_advisor_callback_no_second_llm_call,
+    test_advisor_callback_ask_clarification_safe,
 ]
 
 

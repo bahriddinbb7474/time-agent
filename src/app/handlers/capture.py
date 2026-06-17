@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import load_config
 from app.core.time import now_tz
 from app.services.capture_confirmation_service import (
+    ADVISOR_CAPTURE_CALLBACK_PREFIX,
     CAPTURE_ACTION_BOSS,
     CAPTURE_ACTION_CANCEL,
     CAPTURE_ACTION_EXPIRED_CANCEL,
@@ -495,3 +496,121 @@ async def _finalize_capture_ui(callback: CallbackQuery) -> None:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         return
+
+
+# ── Advisor capture confirmation callback ────────────────────────────────────
+
+
+def _parse_advisor_proposal_json(raw: str | None) -> dict | None:
+    if not raw:
+        return None
+    try:
+        import json
+        data = json.loads(raw)
+        if isinstance(data, dict) and data.get("proposal_type"):
+            return data
+        return None
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+@router.callback_query(F.data.startswith(f"{ADVISOR_CAPTURE_CALLBACK_PREFIX}:"))
+async def advisor_capture_callback(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    scheduler: AsyncIOScheduler,
+):
+    if callback.message is None or callback.from_user is None:
+        await callback.answer("Нет активного действия.", show_alert=False)
+        return
+
+    action = (callback.data or "").removeprefix(f"{ADVISOR_CAPTURE_CALLBACK_PREFIX}:")
+    draft_service = CaptureDraftService(session)
+    await draft_service.expire_old_pending_drafts(
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+    )
+
+    pending_record = await draft_service.get_latest_pending_draft(
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+    )
+
+    if action == "cancel":
+        if pending_record is not None:
+            await draft_service.mark_cancelled(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer("Отменено.")
+        await callback.answer()
+        return
+
+    if action == "ask_clarification":
+        await _finalize_capture_ui(callback)
+        await callback.message.answer("Уточните запрос текстом.")
+        await callback.answer()
+        return
+
+    if pending_record is None:
+        await _finalize_capture_ui(callback)
+        await callback.answer("Черновик не найден.", show_alert=True)
+        return
+
+    proposal = _parse_advisor_proposal_json(
+        getattr(pending_record, "advisor_proposal_json", None)
+    )
+    if proposal is None:
+        await draft_service.mark_cancelled(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer("Предложение AI устарело. Попробуйте снова.")
+        await callback.answer()
+        return
+
+    service = CaptureActionService(
+        session,
+        scheduler=scheduler,
+        bot=callback.bot,
+    )
+
+    if action == "confirm_later":
+        title = proposal.get("title") or pending_record.raw_text
+        task = await service.create_later_from_text(title)
+        await draft_service.mark_confirmed(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer(f"На потом: #{task.id}")
+        await callback.answer()
+        return
+
+    if action == "confirm_boss":
+        title = proposal.get("title") or pending_record.raw_text
+        task = await service.create_boss_from_text(
+            title,
+            user_id=callback.from_user.id,
+        )
+        await draft_service.mark_confirmed(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer(f"Boss задача: #{task.id}")
+        await callback.answer()
+        return
+
+    if action == "confirm_task":
+        title = proposal.get("title") or pending_record.raw_text
+        result = await service.create_task_from_text(
+            title,
+            user_id=callback.from_user.id,
+        )
+        await draft_service.mark_confirmed(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer(result.user_message)
+        await callback.answer()
+        return
+
+    if action == "confirm_settings_change":
+        await draft_service.mark_confirmed(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer(
+            "Предложение принято. Изменение целей будет подключено на следующем этапе."
+        )
+        await callback.answer()
+        return
+
+    await callback.answer("Неизвестное действие.", show_alert=True)
