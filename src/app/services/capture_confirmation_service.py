@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.services.capture_router_service import (
     CAPTURE_KIND_BOSS,
@@ -8,6 +9,9 @@ from app.services.capture_router_service import (
     CAPTURE_KIND_TASK,
     CaptureDraft,
 )
+
+if TYPE_CHECKING:
+    from app.services.advisor_presentation_service import AdvisorPresentationResult
 
 
 CAPTURE_CALLBACK_PREFIX = "capture"
@@ -17,6 +21,17 @@ CAPTURE_ACTION_BOSS = "boss"
 CAPTURE_ACTION_CANCEL = "cancel"
 CAPTURE_ACTION_EXPIRED_LATER = "expired_later"
 CAPTURE_ACTION_EXPIRED_CANCEL = "expired_cancel"
+
+ADVISOR_CAPTURE_CALLBACK_PREFIX = "advisor_capture"
+
+_ADVISOR_ACTION_LABELS: dict[str, str] = {
+    "confirm_task": "Создать задачу (AI)",
+    "confirm_later": "На потом (AI)",
+    "confirm_boss": "Boss (AI)",
+    "confirm_settings_change": "Применить (AI)",
+    "ask_clarification": "Уточнить",
+    "cancel": "Отмена",
+}
 
 
 @dataclass(slots=True, frozen=True)
@@ -83,3 +98,26 @@ def build_expired_capture_button_specs() -> list[CaptureButtonSpec]:
             callback_data=build_capture_callback_data(CAPTURE_ACTION_EXPIRED_CANCEL),
         ),
     ]
+
+
+def build_advisor_callback_data(action: str) -> str:
+    return f"{ADVISOR_CAPTURE_CALLBACK_PREFIX}:{action}"
+
+
+def build_advisor_button_specs(
+    presentation: "AdvisorPresentationResult",
+) -> list[CaptureButtonSpec]:
+    specs: list[CaptureButtonSpec] = []
+    if presentation.primary_action:
+        label = _ADVISOR_ACTION_LABELS.get(presentation.primary_action, presentation.primary_action)
+        specs.append(CaptureButtonSpec(
+            text=label,
+            callback_data=build_advisor_callback_data(presentation.primary_action),
+        ))
+    for action in presentation.secondary_actions:
+        label = _ADVISOR_ACTION_LABELS.get(action, action)
+        specs.append(CaptureButtonSpec(
+            text=label,
+            callback_data=build_advisor_callback_data(action),
+        ))
+    return specs

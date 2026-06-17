@@ -19,6 +19,7 @@ from app.services.capture_confirmation_service import (
     CAPTURE_ACTION_LATER,
     CAPTURE_ACTION_TASK,
     CAPTURE_CALLBACK_PREFIX,
+    build_advisor_button_specs,
     build_capture_button_specs,
     build_capture_confirmation_text,
     build_expired_capture_button_specs,
@@ -33,6 +34,12 @@ from app.services.capture_router_service import (
     CAPTURE_KIND_IGNORE,
     CaptureRouterService,
 )
+from app.services.advisor_capture_service import (
+    advisor_needed,
+    build_safe_advisor_proposal_json,
+    run_advisor_for_draft,
+)
+from app.services.advisor_presentation_service import format_advisor_result
 from app.services.api_limit_service import ApiLimitService
 from app.services.api_usage_service import ApiUsageService
 from app.services.stt_provider import DisabledSTTProvider, OpenRouterSTTProvider, get_stt_provider
@@ -79,6 +86,66 @@ def build_expired_capture_keyboard() -> InlineKeyboardMarkup:
             for button in build_expired_capture_button_specs()
         ]
     )
+
+
+def _build_advisor_keyboard(presentation) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=b.text, callback_data=b.callback_data)]
+            for b in build_advisor_button_specs(presentation)
+        ]
+    )
+
+
+async def _try_advisor_response(
+    message: Message,
+    session: AsyncSession,
+    draft,
+    draft_service: CaptureDraftService,
+    settings,
+    *,
+    source: str = "text",
+    transcript: str | None = None,
+) -> bool:
+    """Try to show an advisor response. Returns True if handled, False to fall through."""
+    if not advisor_needed(draft):
+        return False
+
+    try:
+        orch_result = await run_advisor_for_draft(
+            draft, session=session, settings=settings,
+        )
+        presentation = format_advisor_result(orch_result)
+    except Exception:
+        log.warning("Advisor failed, falling through to rules", exc_info=True)
+        return False
+
+    if not presentation.safe_to_show:
+        return False
+
+    if presentation.requires_confirmation:
+        proposal_json = None
+        if orch_result.validation_result is not None:
+            proposal_json = build_safe_advisor_proposal_json(
+                orch_result.validation_result.safe_proposal,
+            )
+
+        await draft_service.create_pending_draft(
+            chat_id=message.chat.id,
+            user_id=message.from_user.id,
+            draft=draft,
+            source=source,
+            transcript=transcript,
+            advisor_proposal_json=proposal_json,
+        )
+        await message.answer(
+            presentation.text,
+            reply_markup=_build_advisor_keyboard(presentation),
+        )
+        return True
+
+    await message.answer(presentation.text)
+    return True
 
 
 async def _record_stt_usage_best_effort(
@@ -236,6 +303,14 @@ async def capture_voice_message(
         )
         return
 
+    handled = await _try_advisor_response(
+        message, session, draft, draft_service, settings,
+        source=CAPTURE_DRAFT_SOURCE_VOICE,
+        transcript=result.text,
+    )
+    if handled:
+        return
+
     await draft_service.create_pending_draft(
         chat_id=message.chat.id,
         user_id=message.from_user.id,
@@ -251,10 +326,13 @@ async def capture_voice_message(
 
 
 @router.message(F.text & ~F.text.startswith("/"))
-async def capture_text_message(message: Message, session: AsyncSession):
+async def capture_text_message(
+    message: Message, session: AsyncSession, settings=None,
+):
     if message.text is None or message.chat is None or message.from_user is None:
         return
 
+    settings = settings or load_config()
     draft = CaptureRouterService().classify_text(message.text)
     if draft.kind == CAPTURE_KIND_IGNORE:
         return
@@ -287,6 +365,12 @@ async def capture_text_message(message: Message, session: AsyncSession):
             ),
             reply_markup=build_capture_confirmation_keyboard(),
         )
+        return
+
+    handled = await _try_advisor_response(
+        message, session, draft, draft_service, settings,
+    )
+    if handled:
         return
 
     await draft_service.create_pending_draft(
