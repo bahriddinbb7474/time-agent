@@ -22,16 +22,22 @@ class CaptureDraft:
     title: str | None = None
     planned_at: datetime | None = None
     duration_min: int | None = None
+    confidence: float = 1.0
+    reason_code: str = "rules"
+    needs_clarification: bool = False
+    # advisor_intent: "capture" | "help" | "settings" | "unknown"
+    # Stage 19.1 foundation only — logic for help/settings in Stage 19.2+
+    advisor_intent: str = "capture"
 
 
 class CaptureRouterService:
     def classify_text(self, text: str | None) -> CaptureDraft:
         raw = (text or "").strip()
         if not raw:
-            return CaptureDraft(kind=CAPTURE_KIND_IGNORE, text="")
+            return CaptureDraft(kind=CAPTURE_KIND_IGNORE, text="", reason_code="rules_ignore")
 
         if raw.startswith("/"):
-            return CaptureDraft(kind=CAPTURE_KIND_IGNORE, text=raw)
+            return CaptureDraft(kind=CAPTURE_KIND_IGNORE, text=raw, reason_code="rules_ignore")
 
         category, title, planned_at, duration_min = parse_add_payload(raw)
 
@@ -43,6 +49,7 @@ class CaptureRouterService:
                 title=title,
                 planned_at=planned_at,
                 duration_min=duration_min,
+                reason_code="rules_boss",
             )
 
         if planned_at is not None or self._starts_with_known_category(raw):
@@ -53,9 +60,10 @@ class CaptureRouterService:
                 title=title,
                 planned_at=planned_at,
                 duration_min=duration_min,
+                reason_code="rules_task",
             )
 
-        return CaptureDraft(kind=CAPTURE_KIND_LATER, text=raw, title=raw)
+        return CaptureDraft(kind=CAPTURE_KIND_LATER, text=raw, title=raw, reason_code="rules_later")
 
     @staticmethod
     def _starts_with_known_category(raw: str) -> bool:

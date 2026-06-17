@@ -125,6 +125,28 @@ class ApiUsageService:
             occurred_at=occurred_at,
         )
 
+    async def record_llm(
+        self,
+        *,
+        provider: str,
+        model: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        estimated_cost_usd: float = 0.0,
+        status: str = "success",
+        occurred_at: datetime | None = None,
+    ) -> ApiUsageRecord:
+        return await self.record(
+            provider=provider,
+            service_type="llm",
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            status=status,
+            occurred_at=occurred_at,
+        )
+
     async def record_limit_exceeded(
         self,
         *,
