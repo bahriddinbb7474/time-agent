@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly PROJECT_DIR="/opt/time-agent"
 readonly TARGET_BRANCH="main"
-readonly TARGET_HEAD="fe83d02"
+readonly MINIMUM_BASE_HEAD="5d8f064"
 readonly CONTAINER="time_agent_bot"
 readonly DB_PATH="/app/data/app.db"
 readonly ENV_FILE=".env"
@@ -102,14 +102,18 @@ set_env_value() {
 }
 
 require_target_checkout() {
-    local branch head
+    local branch head remote_head
     branch="$(git branch --show-current)"
     head="$(git rev-parse --short=7 HEAD)"
+    remote_head="$(git rev-parse --short=7 origin/$TARGET_BRANCH)"
     [[ "$branch" == "$TARGET_BRANCH" ]] || \
         die "Expected branch $TARGET_BRANCH, found $branch"
-    [[ "$head" == "$TARGET_HEAD" ]] || \
-        die "Expected HEAD $TARGET_HEAD, found $head"
-    say "Git branch/head: $branch $head"
+    [[ "$head" == "$remote_head" ]] || \
+        die "Expected local HEAD to match origin/$TARGET_BRANCH ($remote_head), found $head"
+    git merge-base --is-ancestor "$MINIMUM_BASE_HEAD" HEAD || \
+        die "Expected HEAD to contain base commit $MINIMUM_BASE_HEAD"
+    say "Git branch/head: $branch $head (matches origin/$TARGET_BRANCH)"
+    say "Base commit present: $MINIMUM_BASE_HEAD"
 }
 
 require_container_running() {

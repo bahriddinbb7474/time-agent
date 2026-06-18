@@ -5,6 +5,7 @@ Verifies:
 - shell syntax is valid via `bash -n`
 - production DB path is `/app/data/app.db`
 - forbidden `sqlite3 data/app.db` usage is absent
+- precheck requires `main`, local HEAD == `origin/main`, and base commit ancestry
 - daily request and cost limits are checked
 - secret values and `.env` contents are not printed
 - required commands are present: precheck / enable / verify / disable
@@ -56,6 +57,15 @@ def test_script_does_not_use_forbidden_sqlite3_path() -> None:
     print("PASS: test_script_does_not_use_forbidden_sqlite3_path")
 
 
+def test_script_uses_flexible_head_check() -> None:
+    assert 'readonly MINIMUM_BASE_HEAD="5d8f064"' in SCRIPT_TEXT
+    assert 'remote_head="$(git rev-parse --short=7 origin/$TARGET_BRANCH)"' in SCRIPT_TEXT
+    assert '[[ "$head" == "$remote_head" ]]' in SCRIPT_TEXT
+    assert 'git merge-base --is-ancestor "$MINIMUM_BASE_HEAD" HEAD' in SCRIPT_TEXT
+    assert 'readonly TARGET_HEAD=' not in SCRIPT_TEXT
+    print("PASS: test_script_uses_flexible_head_check")
+
+
 def test_script_checks_daily_limits() -> None:
     assert 'request_limit="$(read_env_value LLM_DAILY_REQUEST_LIMIT)"' in SCRIPT_TEXT
     assert 'cost_limit="$(read_env_value LLM_DAILY_COST_USD_LIMIT)"' in SCRIPT_TEXT
@@ -105,6 +115,7 @@ TESTS = [
     test_script_passes_bash_syntax_check,
     test_script_uses_container_db_path,
     test_script_does_not_use_forbidden_sqlite3_path,
+    test_script_uses_flexible_head_check,
     test_script_checks_daily_limits,
     test_script_does_not_print_secret_values_or_env_contents,
     test_script_contains_required_commands,
