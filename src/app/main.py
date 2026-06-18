@@ -17,6 +17,7 @@ from app.handlers.quran import router as quran_router
 from app.handlers.targets import router as targets_router
 from app.handlers.capture import router as capture_router
 from app.handlers.usage import router as usage_router
+from app.handlers.advisor import router as advisor_router
 
 from app.db.database import get_sessionmaker
 from app.db.migration_runner import run_migrations
@@ -99,6 +100,7 @@ async def main() -> None:
     dp.include_router(targets_router)
     dp.include_router(capture_router)
     dp.include_router(usage_router)
+    dp.include_router(advisor_router)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)

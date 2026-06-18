@@ -41,6 +41,7 @@ from app.services.advisor_capture_service import (
     run_advisor_for_draft,
 )
 from app.services.advisor_presentation_service import format_advisor_result
+from app.services.advisor_runtime_service import advisor_runtime
 from app.services.api_limit_service import ApiLimitService
 from app.services.api_usage_service import ApiUsageService
 from app.services.stt_provider import DisabledSTTProvider, OpenRouterSTTProvider, get_stt_provider
@@ -110,6 +111,13 @@ async def _try_advisor_response(
 ) -> bool:
     """Try to show an advisor response. Returns True if handled, False to fall through."""
     if not advisor_needed(draft):
+        return False
+
+    runtime_status = advisor_runtime.status(settings)
+    if not runtime_status.enabled or not runtime_status.configuration_ready:
+        if draft.advisor_intent == "settings":
+            await message.answer("Изменение целей сейчас недоступно. Попробуйте позже.")
+            return True
         return False
 
     try:
