@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly PROJECT_DIR="/opt/time-agent"
 readonly TARGET_BRANCH="main"
-readonly TARGET_HEAD="5d8f064"
+readonly TARGET_HEAD="fe83d02"
 readonly CONTAINER="time_agent_bot"
 readonly DB_PATH="/app/data/app.db"
 readonly ENV_FILE=".env"
