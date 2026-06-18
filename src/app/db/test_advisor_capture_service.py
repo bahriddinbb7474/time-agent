@@ -25,7 +25,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 os.environ.setdefault("ALLOWED_TELEGRAM_ID", "123456789")
@@ -55,6 +55,7 @@ from app.services.capture_router_service import (
     CAPTURE_KIND_LATER,
     CAPTURE_KIND_TASK,
     CaptureDraft,
+    CaptureRouterService,
 )
 
 
@@ -167,6 +168,30 @@ def test_advisor_needed_true_for_needs_clarification():
                          needs_clarification=True)
     assert advisor_needed(draft) is True
     print("PASS: test_advisor_needed_true_for_needs_clarification")
+
+
+def test_settings_routing_regressions():
+    router = CaptureRouterService()
+    for phrase in (
+        "хочу 2 литра воды",
+        "добавь цель спорт 20 минут",
+        "измени цель вода на 2 литра",
+    ):
+        draft = router.classify_text(phrase)
+        assert draft.advisor_intent == "settings", f"phrase={phrase!r}: {draft}"
+        assert advisor_needed(draft) is True
+
+    ordinary = router.classify_text("Купить молоко")
+    assert ordinary.advisor_intent == "capture"
+    assert advisor_needed(ordinary) is False
+
+    clarification = router.classify_text("ок")
+    assert clarification.advisor_intent == "unknown"
+    assert clarification.needs_clarification is True
+
+    progress = router.classify_text("Вода +500 мл")
+    assert progress.advisor_intent != "settings"
+    print("PASS: test_settings_routing_regressions")
 
 
 # ── build_safe_advisor_proposal_json tests ───────────────────────────────────
@@ -287,6 +312,46 @@ async def test_fake_provider_returns_advisor_result():
         tmp.cleanup()
 
 
+async def test_settings_intent_guard_converts_task_proposal():
+    tmp, engine, Session = await _setup_session()
+    try:
+        provider = MagicMock()
+        provider.advise = AsyncMock(
+            return_value=_proposal(proposal_type="task", title="Пить воду")
+        )
+        async with Session() as session:
+            for phrase in (
+                "хочу 2 литра воды",
+                "добавь цель спорт 20 минут",
+                "измени цель вода на 2 литра",
+            ):
+                draft = CaptureRouterService().classify_text(phrase)
+                with patch(
+                    "app.services.advisor_capture_service.get_ai_advisor_provider",
+                    return_value=provider,
+                ):
+                    result = await run_advisor_for_draft(
+                        draft,
+                        session=session,
+                        settings=_settings(advisor_provider="fake"),
+                        now_dt=_NOW_DT,
+                    )
+                assert result.validation_result is not None
+                safe = result.validation_result.safe_proposal
+                assert safe.proposal_type == "settings_change", (
+                    f"phrase={phrase!r}: got {safe.proposal_type!r}"
+                )
+                assert safe.needs_confirmation is True
+                assert safe.target_name
+                assert safe.target_value
+                assert safe.target_unit
+        assert provider.advise.await_count == 3
+        print("PASS: test_settings_intent_guard_converts_task_proposal")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
 async def test_gate_blocked_safe_result():
     tmp, engine, Session = await _setup_session()
     try:
@@ -358,7 +423,7 @@ async def test_one_run_max_one_provider_call():
 
 from sqlalchemy import select
 from app.db.models import Task
-from app.handlers.capture import advisor_capture_callback
+from app.handlers.capture import _try_advisor_response, advisor_capture_callback
 from app.services.capture_confirmation_service import (
     ADVISOR_CAPTURE_CALLBACK_PREFIX,
     build_advisor_callback_data,
@@ -391,6 +456,15 @@ class _FakeCallbackMessage:
         self.reply_markup_removed = reply_markup is None
 
 
+class _FakeCaptureMessage(_FakeCallbackMessage):
+    def __init__(self):
+        super().__init__()
+        self.from_user = _FakeUser()
+
+    async def answer(self, text: str, reply_markup=None):
+        self.answers.append(text)
+
+
 class _FakeCallback:
     def __init__(self, action: str):
         self.data = build_advisor_callback_data(action)
@@ -418,6 +492,33 @@ def _advisor_json(*, proposal_type="later", title="AI задача"):
         "needs_clarification": False,
         "user_message": "Тест.",
     }, ensure_ascii=False)
+
+
+async def test_disabled_settings_does_not_fall_back_to_task_buttons():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureRouterService().classify_text("хочу 2 литра воды")
+            message = _FakeCaptureMessage()
+            handled = await _try_advisor_response(
+                message,
+                session,
+                draft,
+                service,
+                _settings(advisor_provider="disabled"),
+            )
+            assert handled is True
+            assert any("недоступно" in answer for answer in message.answers)
+            pending = await service.get_latest_pending_draft(
+                chat_id=CHAT_ID,
+                user_id=USER_ID,
+            )
+            assert pending is None, "disabled settings must not create an ordinary draft"
+        print("PASS: test_disabled_settings_does_not_fall_back_to_task_buttons")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
 
 
 async def test_advisor_callback_cancel_marks_cancelled():
@@ -596,6 +697,32 @@ async def test_advisor_callback_confirm_settings_does_not_mutate_targets():
         tmp.cleanup()
 
 
+async def test_advisor_callback_rejects_action_type_mismatch():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="хочу 2 литра воды")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID,
+                user_id=USER_ID,
+                draft=draft,
+                advisor_proposal_json=_advisor_json(
+                    proposal_type="settings_change",
+                    title=None,
+                ),
+            )
+            cb = _FakeCallback("confirm_task")
+            await advisor_capture_callback(cb, session, scheduler=None)
+            result = await session.execute(select(Task))
+            assert list(result.scalars().all()) == [], "mismatched callback must not create tasks"
+            assert any("устарело" in answer for answer in cb.message.answers)
+        print("PASS: test_advisor_callback_rejects_action_type_mismatch")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
 async def test_advisor_callback_no_second_llm_call():
     """Callback handler must not call LLM — it uses stored proposal_json only."""
     tmp, engine, Session = await _setup_session()
@@ -654,6 +781,7 @@ SYNC_TESTS = [
     test_advisor_needed_true_for_settings,
     test_advisor_needed_true_for_unknown,
     test_advisor_needed_true_for_needs_clarification,
+    test_settings_routing_regressions,
     test_safe_json_contains_only_allowed_keys,
     test_safe_json_excludes_forbidden_fields,
     test_safe_json_roundtrips_values,
@@ -665,8 +793,10 @@ ASYNC_TESTS = [
     test_create_draft_without_advisor_json_still_works,
     test_disabled_provider_safe_result,
     test_fake_provider_returns_advisor_result,
+    test_settings_intent_guard_converts_task_proposal,
     test_gate_blocked_safe_result,
     test_one_run_max_one_provider_call,
+    test_disabled_settings_does_not_fall_back_to_task_buttons,
     # D3: callback handler tests
     test_advisor_callback_cancel_marks_cancelled,
     test_advisor_callback_missing_json_fails_closed,
@@ -675,6 +805,7 @@ ASYNC_TESTS = [
     test_advisor_callback_confirm_task_creates_task,
     test_advisor_callback_confirm_boss_creates_task,
     test_advisor_callback_confirm_settings_does_not_mutate_targets,
+    test_advisor_callback_rejects_action_type_mismatch,
     test_advisor_callback_no_second_llm_call,
     test_advisor_callback_ask_clarification_safe,
 ]

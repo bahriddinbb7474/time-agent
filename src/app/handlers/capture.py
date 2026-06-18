@@ -119,9 +119,15 @@ async def _try_advisor_response(
         presentation = format_advisor_result(orch_result)
     except Exception:
         log.warning("Advisor failed, falling through to rules", exc_info=True)
+        if draft.advisor_intent == "settings":
+            await message.answer("Изменение целей сейчас недоступно. Попробуйте позже.")
+            return True
         return False
 
     if not presentation.safe_to_show:
+        if draft.advisor_intent == "settings":
+            await message.answer("Изменение целей сейчас недоступно. Попробуйте позже.")
+            return True
         return False
 
     if presentation.requires_confirmation:
@@ -559,6 +565,19 @@ async def advisor_capture_callback(
         getattr(pending_record, "advisor_proposal_json", None)
     )
     if proposal is None:
+        await draft_service.mark_cancelled(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer("Предложение AI устарело. Попробуйте снова.")
+        await callback.answer()
+        return
+
+    expected_proposal_type = {
+        "confirm_later": "later",
+        "confirm_boss": "boss",
+        "confirm_task": "task",
+        "confirm_settings_change": "settings_change",
+    }.get(action)
+    if expected_proposal_type and proposal.get("proposal_type") != expected_proposal_type:
         await draft_service.mark_cancelled(pending_record)
         await _finalize_capture_ui(callback)
         await callback.message.answer("Предложение AI устарело. Попробуйте снова.")
