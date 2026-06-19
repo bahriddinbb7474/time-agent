@@ -9,20 +9,13 @@ Time-Agent is a Telegram bot for personal mental-load dispatching with context-a
 
 ## Current Route
 
-- 18.6-C0: DONE / production PASS.
-- 18.6-C: DONE / production PASS.
-- 18.6-D: DONE / production PASS.
-- PRE-18.7-A: DONE / audit PASS.
-- PRE-18.7-B: DONE / pushed.
-- PRE-18.7-C: current — docs cleanup.
-- Remaining before 18.7: Telegram nightly backup (HIGH/OPEN), single-instance PID guard decision.
-- 18.7: Daily Targets MVP; does not depend on LLM and depends on completed audits/migration foundation.
-- 19: LLM Capture Intelligence.
-- 20: Daily Control 24/7; depends on Stage 19.
-- 21: Task Lifecycle.
-- 22: Production hardening + main DoD.
-- 23: Idea Vault.
-- 24: Statistics & Forecasting; depends on sufficient data quality.
+- 18.6-C0 through 18.7: DONE / production PASS.
+- Stage 19 LLM Capture Intelligence: DONE / production PASS / CLOSED.
+- **Stage 20**: Daily Control 24/7 — next; depends on Stage 19.
+- Stage 21: Task Lifecycle.
+- Stage 22: Production hardening + main DoD.
+- Stage 23: Idea Vault.
+- Stage 24: Statistics & Forecasting; depends on sufficient data quality.
 
 ## Repository Structure
 
@@ -39,7 +32,9 @@ time-agent/
 │  │  ├─ task_lifecycle.py            # /edit and /delete
 │  │  ├─ today.py                     # /today, /siyam_on, /siyam_off
 │  │  ├─ rules.py                     # /rules
-│  │  ├─ capture.py                   # Voice and text capture drafts
+│  │  ├─ targets.py                   # Daily targets commands (Stage 18.7)
+│  │  ├─ capture.py                   # Voice and text capture drafts; advisor wiring (Stage 19)
+│  │  ├─ advisor.py                   # /advisor_status, /advisor_on, /advisor_off (Stage 19.9)
 │  │  ├─ usage.py                     # /usage API stats command
 │  │  └─ quran.py                     # /quran and /quran_status
 │  ├─ services/                       # Business logic
@@ -51,7 +46,18 @@ time-agent/
 │  │  ├─ family_contact_service.py    # Family reminder candidates
 │  │  ├─ boss_priority_service.py     # Boss/critical alert decisions
 │  │  ├─ api_limit_service.py         # Daily API hard limits (Stage 18.6-D)
-│  │  └─ api_usage_service.py         # API usage recording and aggregation
+│  │  ├─ api_usage_service.py         # API usage recording and aggregation
+│  │  ├─ capture_router_service.py    # Rules-first text classifier; assigns advisor_intent (Stage 19)
+│  │  ├─ capture_draft_service.py     # Pending capture draft lifecycle (Stage 19)
+│  │  ├─ capture_confirmation_service.py  # Capture/advisor confirmation button specs (Stage 19)
+│  │  ├─ capture_action_service.py    # Convert confirmed draft into task/later/boss (Stage 19)
+│  │  ├─ advisor_capture_service.py   # Thin integration: draft → advisor pipeline (Stage 19)
+│  │  ├─ advisor_runtime_service.py   # Process-local ON/OFF switch; default OFF on restart (Stage 19.9)
+│  │  ├─ advisor_orchestrator.py      # Disabled-check → gate → provider → record → validate (Stage 19)
+│  │  ├─ advisor_usage_gate.py        # Pre-call LLM limit gate; records usage (Stage 19)
+│  │  ├─ advisor_presentation_service.py  # Format orchestration result for Telegram (Stage 19)
+│  │  ├─ advisor_proposal_validator.py    # Validate proposal against context/prayer rules (Stage 19)
+│  │  └─ ai_advisor_provider.py       # OpenRouter/fake/disabled providers; injection-safe prompt (Stage 19)
 │  ├─ scheduler/
 │  │  ├─ scheduler.py                 # APScheduler setup and alert recovery
 │  │  └─ jobs.py                      # Briefings, prayer cache, alert firing
