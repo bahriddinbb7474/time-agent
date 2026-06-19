@@ -14,7 +14,11 @@ from app.keyboards.schedule_review import (
     build_schedule_edit_keyboard,
     build_schedule_review_keyboard,
 )
-from app.services.daily_control_service import DailyControlNotFoundError, TimeBlockService
+from app.services.daily_control_service import (
+    DailyControlNotFoundError,
+    DailyControlValidationError,
+    TimeBlockService,
+)
 from app.services.schedule_confirmation_service import (
     ScheduleConfirmationConflictError,
     ScheduleConfirmationService,
@@ -45,11 +49,19 @@ async def schedule_tomorrow_cmd(
     settings = settings or load_config()
     if not _is_owner(message, settings):
         return
-    proposal = await ScheduleProposalBuilder(session).build(
-        usage_date=now_tz().date() + timedelta(days=1),
-        user_id=settings.allowed_telegram_id,
-        timezone=settings.tz,
-    )
+    try:
+        proposal = await ScheduleProposalBuilder(session).build(
+            usage_date=now_tz().date() + timedelta(days=1),
+            user_id=settings.allowed_telegram_id,
+            timezone=settings.tz,
+        )
+    except DailyControlValidationError:
+        await message.answer(
+            "Не удалось построить черновик из-за конфликта защищённых интервалов. "
+            "Расписание не подтверждено. Попробуй пересобрать позже или "
+            "скорректировать исходные данные."
+        )
+        return
     await message.answer(
         format_schedule_proposal(proposal),
         reply_markup=build_schedule_review_keyboard(proposal.schedule),

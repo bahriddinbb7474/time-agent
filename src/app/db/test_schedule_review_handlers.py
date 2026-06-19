@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.handlers.schedule_review import schedule_tomorrow_cmd
 from app.keyboards.schedule_review import CALLBACK_PREFIX, build_schedule_review_keyboard
+from app.services.daily_control_service import DailyControlValidationError
 
 
 OWNER_ID = 123456789
@@ -80,9 +81,30 @@ async def test_non_owner_command_is_ignored() -> None:
     assert message.answers == []
 
 
+async def test_builder_validation_error_replies_fail_closed() -> None:
+    message = _Message()
+    builder = MagicMock()
+    builder.build = AsyncMock(
+        side_effect=DailyControlValidationError("protected overlap details")
+    )
+    with patch(
+        "app.handlers.schedule_review.ScheduleProposalBuilder",
+        return_value=builder,
+    ):
+        await schedule_tomorrow_cmd(message, MagicMock(), settings=_settings())
+
+    assert len(message.answers) == 1
+    text, reply_markup = message.answers[0]
+    assert "конфликта защищённых интервалов" in text
+    assert "Расписание не подтверждено" in text
+    assert "protected overlap details" not in text
+    assert reply_markup is None
+
+
 async def main_async() -> None:
     await test_owner_command_builds_tomorrow_draft_and_formats_it()
     await test_non_owner_command_is_ignored()
+    await test_builder_validation_error_replies_fail_closed()
 
 
 def main() -> None:
