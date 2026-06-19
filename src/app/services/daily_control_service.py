@@ -9,7 +9,9 @@ from app.core.time import APP_TZ, now_tz
 from app.db.models import ActivityEntry, Checkin, DailySchedule, TimeBlock
 
 
-SCHEDULE_STATUSES = frozenset({"draft", "confirmed", "archived"})
+SCHEDULE_STATUSES = frozenset(
+    {"draft", "confirmed", "declined", "expired", "cancelled", "archived"}
+)
 TIME_BLOCK_STATUSES = frozenset({"planned", "completed", "cancelled"})
 CHECKIN_STATUSES = frozenset({"pending", "open", "answered", "deferred", "expired"})
 
