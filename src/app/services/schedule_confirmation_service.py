@@ -29,6 +29,21 @@ class ScheduleConfirmationService:
         self.session = session
         self.schedules = DailyScheduleService(session)
 
+    async def get(
+        self,
+        *,
+        schedule_id: int,
+        user_id: int,
+        usage_date: date,
+        version: int,
+    ) -> DailySchedule:
+        return await self._owned_version(
+            schedule_id=schedule_id,
+            user_id=user_id,
+            usage_date=usage_date,
+            version=version,
+        )
+
     async def confirm(
         self,
         *,

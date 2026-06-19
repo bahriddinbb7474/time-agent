@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import load_config
 from app.core.time import now_tz
-from app.keyboards.schedule_review import CALLBACK_PREFIX, build_schedule_review_keyboard
+from app.keyboards.schedule_review import (
+    CALLBACK_PREFIX,
+    build_schedule_edit_keyboard,
+    build_schedule_review_keyboard,
+)
 from app.services.daily_control_service import DailyControlNotFoundError, TimeBlockService
 from app.services.schedule_confirmation_service import (
     ScheduleConfirmationConflictError,
@@ -100,12 +104,24 @@ async def schedule_review_callback(
     except (TypeError, ValueError):
         await callback.answer("Некорректная или устаревшая кнопка.", show_alert=True)
         return
-    if action == "edit":
-        await callback.answer("Редактирование будет доступно следующим шагом.")
-        return
-
     service = ScheduleConfirmationService(session)
     try:
+        if action == "edit":
+            schedule = await service.get(
+                schedule_id=schedule_id,
+                user_id=settings.allowed_telegram_id,
+                usage_date=usage_date,
+                version=version,
+            )
+            await _edit_callback_message(
+                callback,
+                "Точечные правки будут подключены следующим шагом.\n"
+                "Защищённые блоки сна и намаза не изменяются.\n"
+                "Сейчас безопасно доступна только пересборка текущих входов.",
+                build_schedule_edit_keyboard(schedule),
+            )
+            await callback.answer("Режим безопасного редактирования.")
+            return
         if action == "confirm":
             schedule = await service.confirm(
                 schedule_id=schedule_id,
