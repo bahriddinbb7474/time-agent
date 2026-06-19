@@ -12,8 +12,19 @@ def format_schedule_proposal(proposal: ScheduleProposal) -> str:
 
     sleep_count = sum(block.block_type == "sleep" for block in proposal.blocks)
     prayer_count = sum(block.block_type == "prayer" for block in proposal.blocks)
+    status_label = {
+        "draft": "черновик",
+        "confirmed": "подтверждено",
+        "declined": "отклонено",
+        "expired": "истекло",
+        "cancelled": "отменено",
+        "archived": "архив",
+    }.get(
+        getattr(proposal.schedule, "status", "draft"),
+        getattr(proposal.schedule, "status", "draft"),
+    )
     lines = [
-        f"План на {proposal.usage_date.isoformat()} — черновик v{proposal.version}",
+        f"План на {proposal.usage_date.isoformat()} — {status_label} v{proposal.version}",
         f"Защищено: сон {sleep_count}, намаз {prayer_count}",
     ]
 
