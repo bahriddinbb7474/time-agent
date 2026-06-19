@@ -134,33 +134,69 @@ async def test_protected_priority_and_overload() -> None:
         ]
         assert len(proposal.unscheduled_items) == 1
         assert proposal.unscheduled_items[0].item.title == "Overload"
-        assert "higher-priority sleep" in proposal.unscheduled_items[0].reason
+        assert "higher-priority" in proposal.unscheduled_items[0].reason
         buffer = proposal.blocks[-1]
         assert buffer.end_at > buffer.start_at
 
 
-async def test_overlapping_protected_blocks_are_rejected() -> None:
+async def test_overlapping_sleep_and_prayer_are_normalized() -> None:
     async with _session_ctx() as session:
         builder = ScheduleProposalBuilder(session)
-        try:
-            await builder.build(
-                usage_date=USAGE_DATE,
-                user_id=USER_ID,
-                timezone=TZ_NAME,
-                block_inputs=[
-                    _block(5, "Sleep", "sleep"),
-                    ProposalBlockInput(
-                        start_at=datetime(2026, 6, 20, 5, 30, tzinfo=TZ),
-                        end_at=datetime(2026, 6, 20, 6, 30, tzinfo=TZ),
-                        title="Prayer",
-                        category="prayer",
-                        block_type="prayer",
-                    ),
-                ],
-            )
-            raise AssertionError("overlapping protected blocks must fail")
-        except DailyControlValidationError:
-            pass
+        inputs = [
+            ProposalBlockInput(
+                start_at=datetime(2026, 6, 20, 0, tzinfo=TZ),
+                end_at=datetime(2026, 6, 20, 7, tzinfo=TZ),
+                title="Sleep",
+                category="sleep",
+                block_type="sleep",
+            ),
+            ProposalBlockInput(
+                start_at=datetime(2026, 6, 20, 5, 30, tzinfo=TZ),
+                end_at=datetime(2026, 6, 20, 6, 30, tzinfo=TZ),
+                title="Fajr",
+                category="prayer",
+                block_type="prayer",
+            ),
+            ProposalBlockInput(
+                start_at=datetime(2026, 6, 20, 5, 45, tzinfo=TZ),
+                end_at=datetime(2026, 6, 20, 6, 15, tzinfo=TZ),
+                title="Task inside protected time",
+                category="work",
+                block_type="task",
+            ),
+        ]
+        first = await builder.build(
+            usage_date=USAGE_DATE,
+            user_id=USER_ID,
+            timezone=TZ_NAME,
+            block_inputs=inputs,
+            collect_project_inputs=False,
+        )
+        second = await builder.build(
+            usage_date=USAGE_DATE,
+            user_id=USER_ID,
+            timezone=TZ_NAME,
+            block_inputs=list(reversed(inputs)),
+            collect_project_inputs=False,
+        )
+
+        protected = [
+            block for block in first.blocks if block.block_type in {"sleep", "prayer"}
+        ]
+        assert [block.block_type for block in protected] == [
+            "sleep",
+            "prayer",
+            "sleep",
+        ]
+        for left, right in zip(protected, protected[1:]):
+            assert left.end_at <= right.start_at
+        assert all(block.title != "Task inside protected time" for block in first.blocks)
+        reasons = [item.reason for item in first.unscheduled_items]
+        assert any("split around protected prayer" in reason for reason in reasons)
+        assert any("higher-priority prayer" in reason for reason in reasons)
+        assert [block.id for block in second.blocks] == [
+            block.id for block in first.blocks
+        ]
 
 
 async def test_collects_cached_project_inputs_without_source_mutation() -> None:
@@ -226,7 +262,7 @@ async def main_async() -> None:
     await test_builds_deterministic_idempotent_draft()
     await test_empty_proposal_and_validation()
     await test_protected_priority_and_overload()
-    await test_overlapping_protected_blocks_are_rejected()
+    await test_overlapping_sleep_and_prayer_are_normalized()
     await test_collects_cached_project_inputs_without_source_mutation()
     await test_missing_inputs_return_safe_partial_proposal()
 

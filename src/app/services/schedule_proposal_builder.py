@@ -20,8 +20,8 @@ SUPPORTED_BLOCK_TYPES = frozenset(
     {"sleep", "prayer", "fixed_task", "family", "target", "task", "buffer", "rest"}
 )
 BLOCK_TYPE_PRIORITY = {
-    "sleep": 0,
-    "prayer": 1,
+    "prayer": 0,
+    "sleep": 1,
     "fixed_task": 2,
     "family": 3,
     "target": 4,
@@ -126,10 +126,13 @@ class ScheduleProposalBuilder:
                 )
                 for issue in collected.issues
             )
-        accepted, unscheduled = self._place_inputs(
+        normalized_inputs, normalization_warnings = self._normalize_protected_overlaps(
             combined_inputs, usage_date=usage_date, timezone=tz
         )
-        unscheduled = collection_issues + unscheduled
+        accepted, unscheduled = self._place_inputs(
+            normalized_inputs, usage_date=usage_date, timezone=tz
+        )
+        unscheduled = collection_issues + normalization_warnings + unscheduled
         buffer = self._build_buffer(
             accepted, usage_date=usage_date, timezone=tz, ratio=buffer_ratio
         )
@@ -209,9 +212,19 @@ class ScheduleProposalBuilder:
                 item.block_type in PROTECTED_BLOCK_TYPES
                 and conflict.block_type in PROTECTED_BLOCK_TYPES
             ):
-                raise DailyControlValidationError(
-                    "protected sleep/prayer proposal blocks must not overlap"
+                unscheduled.append(
+                    UnscheduledItem(
+                        item=item,
+                        reason=(
+                            "protected block could not be represented without overlap "
+                            f"with {conflict.block_type}"
+                        ),
+                        title=item.title,
+                        source_type=item.source_type,
+                        source_id=item.source_id,
+                    )
                 )
+                continue
             unscheduled.append(
                 UnscheduledItem(
                     item=item,
@@ -222,6 +235,115 @@ class ScheduleProposalBuilder:
                 )
             )
         return accepted, unscheduled
+
+    def _normalize_protected_overlaps(
+        self,
+        block_inputs: list[ProposalBlockInput],
+        *,
+        usage_date: date,
+        timezone: ZoneInfo,
+    ) -> tuple[list[ProposalBlockInput], list[UnscheduledItem]]:
+        for item in block_inputs:
+            self._validate_input(item, usage_date=usage_date, timezone=timezone)
+        prayers = self._merge_protected(
+            [item for item in block_inputs if item.block_type == "prayer"],
+            block_type="prayer",
+        )
+        sleeps = [item for item in block_inputs if item.block_type == "sleep"]
+        others = [
+            item
+            for item in block_inputs
+            if item.block_type not in PROTECTED_BLOCK_TYPES
+        ]
+        sleep_segments: list[ProposalBlockInput] = []
+        warnings: list[UnscheduledItem] = []
+        for sleep in sorted(sleeps, key=self._chronological_key):
+            segments = self._subtract_intervals(sleep, prayers)
+            sleep_segments.extend(segments)
+            if len(segments) != 1 or (
+                segments
+                and (
+                    segments[0].start_at != sleep.start_at
+                    or segments[0].end_at != sleep.end_at
+                )
+            ):
+                warnings.append(
+                    UnscheduledItem(
+                        item=sleep,
+                        reason="sleep representation was split around protected prayer",
+                        title=sleep.title,
+                        source_type=sleep.source_type,
+                        source_id=sleep.source_id,
+                    )
+                )
+        normalized_sleeps = self._merge_protected(
+            sleep_segments, block_type="sleep"
+        )
+        return prayers + normalized_sleeps + others, warnings
+
+    @classmethod
+    def _merge_protected(
+        cls, items: list[ProposalBlockInput], *, block_type: str
+    ) -> list[ProposalBlockInput]:
+        merged: list[ProposalBlockInput] = []
+        for item in sorted(items, key=cls._chronological_key):
+            if not merged or item.start_at > merged[-1].end_at:
+                merged.append(item)
+                continue
+            previous = merged[-1]
+            merged[-1] = ProposalBlockInput(
+                start_at=previous.start_at,
+                end_at=max(previous.end_at, item.end_at),
+                title=(
+                    previous.title
+                    if previous.title == item.title
+                    else f"{previous.title} / {item.title}"
+                ),
+                category=block_type,
+                block_type=block_type,
+                flexibility="protected",
+                source_type="proposal_normalization",
+            )
+        return merged
+
+    @staticmethod
+    def _subtract_intervals(
+        sleep: ProposalBlockInput, prayers: list[ProposalBlockInput]
+    ) -> list[ProposalBlockInput]:
+        segments: list[ProposalBlockInput] = []
+        cursor = sleep.start_at
+        for prayer in prayers:
+            if prayer.end_at <= cursor or prayer.start_at >= sleep.end_at:
+                continue
+            if prayer.start_at > cursor:
+                segments.append(
+                    ScheduleProposalBuilder._sleep_segment(
+                        sleep, cursor, min(prayer.start_at, sleep.end_at)
+                    )
+                )
+            cursor = max(cursor, prayer.end_at)
+            if cursor >= sleep.end_at:
+                break
+        if cursor < sleep.end_at:
+            segments.append(
+                ScheduleProposalBuilder._sleep_segment(sleep, cursor, sleep.end_at)
+            )
+        return segments
+
+    @staticmethod
+    def _sleep_segment(
+        source: ProposalBlockInput, start_at: datetime, end_at: datetime
+    ) -> ProposalBlockInput:
+        return ProposalBlockInput(
+            start_at=start_at,
+            end_at=end_at,
+            title=source.title,
+            category=source.category,
+            block_type="sleep",
+            flexibility="protected",
+            source_type=source.source_type,
+            source_id=source.source_id,
+        )
 
     @staticmethod
     def _build_buffer(
