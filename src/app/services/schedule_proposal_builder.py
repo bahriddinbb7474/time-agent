@@ -12,6 +12,7 @@ from app.services.daily_control_service import (
     DailyScheduleService,
     TimeBlockService,
 )
+from app.services.schedule_input_collector import ScheduleInputCollector
 
 
 PROPOSAL_TYPE = "daily_schedule_draft"
@@ -60,8 +61,11 @@ class ScheduleProposal:
 
 @dataclass(frozen=True, slots=True)
 class UnscheduledItem:
-    item: ProposalBlockInput
+    item: ProposalBlockInput | None
     reason: str
+    title: str
+    source_type: str
+    source_id: int | None = None
 
 
 class ScheduleProposalBuilder:
@@ -70,6 +74,7 @@ class ScheduleProposalBuilder:
     def __init__(self, session: AsyncSession) -> None:
         self.schedules = DailyScheduleService(session)
         self.blocks = TimeBlockService(session)
+        self.inputs = ScheduleInputCollector(session)
 
     async def build(
         self,
@@ -79,6 +84,7 @@ class ScheduleProposalBuilder:
         timezone: str,
         block_inputs: list[ProposalBlockInput] | tuple[ProposalBlockInput, ...] = (),
         buffer_ratio: float = 0.10,
+        collect_project_inputs: bool = True,
     ) -> ScheduleProposal:
         tz = self._timezone(timezone)
         if not 0 <= buffer_ratio <= 0.15:
@@ -91,9 +97,39 @@ class ScheduleProposalBuilder:
                 "schedule proposal requires an existing or new draft schedule"
             )
 
+        combined_inputs = list(block_inputs)
+        collection_issues: list[UnscheduledItem] = []
+        if collect_project_inputs:
+            collected = await self.inputs.collect(
+                usage_date=usage_date, user_id=user_id, timezone=tz
+            )
+            combined_inputs.extend(
+                ProposalBlockInput(
+                    start_at=item.start_at,
+                    end_at=item.end_at,
+                    title=item.title,
+                    category=item.category,
+                    block_type=item.block_type,
+                    flexibility=item.flexibility,
+                    source_type=item.source_type,
+                    source_id=item.source_id,
+                )
+                for item in collected.blocks
+            )
+            collection_issues.extend(
+                UnscheduledItem(
+                    item=None,
+                    reason=issue.reason,
+                    title=issue.title,
+                    source_type=issue.source_type,
+                    source_id=issue.source_id,
+                )
+                for issue in collected.issues
+            )
         accepted, unscheduled = self._place_inputs(
-            block_inputs, usage_date=usage_date, timezone=tz
+            combined_inputs, usage_date=usage_date, timezone=tz
         )
+        unscheduled = collection_issues + unscheduled
         buffer = self._build_buffer(
             accepted, usage_date=usage_date, timezone=tz, ratio=buffer_ratio
         )
@@ -180,6 +216,9 @@ class ScheduleProposalBuilder:
                 UnscheduledItem(
                     item=item,
                     reason=f"overlaps higher-priority {conflict.block_type} block",
+                    title=item.title,
+                    source_type=item.source_type,
+                    source_id=item.source_id,
                 )
             )
         return accepted, unscheduled

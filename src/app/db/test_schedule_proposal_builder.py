@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.db.models import Base
+from app.db.models import Base, PrayerTime, Task, UserRoutine
 from app.services.daily_control_service import DailyControlValidationError
 from app.services.schedule_proposal_builder import (
     PROPOSAL_TYPE,
@@ -163,11 +163,72 @@ async def test_overlapping_protected_blocks_are_rejected() -> None:
             pass
 
 
+async def test_collects_cached_project_inputs_without_source_mutation() -> None:
+    async with _session_ctx() as session:
+        created_at = datetime(2026, 6, 19, 12, tzinfo=TZ)
+        task = Task(
+            title="Timed task",
+            planned_at=datetime(2026, 6, 20, 10, tzinfo=TZ),
+            duration_min=45,
+            status="todo",
+            category="work",
+            context_status="normal",
+            created_at=created_at,
+        )
+        session.add_all(
+            [
+                task,
+                PrayerTime(
+                    date=USAGE_DATE,
+                    fajr=datetime(2026, 6, 20, 4, 30).time(),
+                    dhuhr=datetime(2026, 6, 20, 12, 30).time(),
+                    asr=datetime(2026, 6, 20, 17, 0).time(),
+                    maghrib=datetime(2026, 6, 20, 19, 45).time(),
+                    isha=datetime(2026, 6, 20, 21, 15).time(),
+                    created_at=created_at,
+                ),
+                UserRoutine(
+                    mode="summer",
+                    sleep_start=datetime(2026, 6, 20, 23, 0).time(),
+                    sleep_end=datetime(2026, 6, 20, 4, 0).time(),
+                    second_sleep_start=None,
+                    second_sleep_end=None,
+                    created_at=created_at,
+                    updated_at=created_at,
+                ),
+            ]
+        )
+        await session.commit()
+
+        proposal = await ScheduleProposalBuilder(session).build(
+            usage_date=USAGE_DATE, user_id=USER_ID, timezone=TZ_NAME
+        )
+
+        block_types = [block.block_type for block in proposal.blocks]
+        assert block_types.count("sleep") == 2
+        assert block_types.count("prayer") == 5
+        assert "fixed_task" in block_types
+        assert proposal.unscheduled_items == ()
+        assert task.status == "todo"
+        assert task.planned_at is not None
+
+
+async def test_missing_inputs_return_safe_partial_proposal() -> None:
+    async with _session_ctx() as session:
+        proposal = await ScheduleProposalBuilder(session).build(
+            usage_date=USAGE_DATE, user_id=USER_ID, timezone=TZ_NAME
+        )
+        assert proposal.blocks == ()
+        assert proposal.unscheduled_items == ()
+
+
 async def main_async() -> None:
     await test_builds_deterministic_idempotent_draft()
     await test_empty_proposal_and_validation()
     await test_protected_priority_and_overload()
     await test_overlapping_protected_blocks_are_rejected()
+    await test_collects_cached_project_inputs_without_source_mutation()
+    await test_missing_inputs_return_safe_partial_proposal()
 
 
 def main() -> None:
