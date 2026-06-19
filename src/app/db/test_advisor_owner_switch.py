@@ -188,6 +188,60 @@ async def test_capture_allows_advisor_when_runtime_on_and_config_safe():
     print("PASS: test_capture_allows_advisor_when_runtime_on_and_config_safe")
 
 
+async def test_advisor_on_cmd_state_visible_to_capture_path():
+    """Verify /advisor_on command state is the same instance seen by _try_advisor_response."""
+    settings = _settings()
+    advisor_runtime.disable()
+
+    # Owner sends /advisor_on
+    cmd_msg = _Message()
+    await advisor_on_cmd(cmd_msg, settings=settings)
+    assert advisor_runtime.status(settings).enabled is True
+    assert cmd_msg.answers[-1] == "Advisor runtime: enabled."
+
+    # Capture path must see the updated state without restart
+    draft = CaptureRouterService().classify_text("как пользоваться ботом")
+    capture_msg = _Message()
+    provider_call = AsyncMock(return_value=MagicMock())
+    presentation = SimpleNamespace(safe_to_show=True, requires_confirmation=False, text="AI help")
+    try:
+        with (
+            patch("app.handlers.capture.run_advisor_for_draft", provider_call),
+            patch("app.handlers.capture.format_advisor_result", return_value=presentation),
+        ):
+            handled = await _try_advisor_response(
+                capture_msg, MagicMock(), draft, MagicMock(), settings,
+            )
+        assert handled is True, "capture path must use advisor when runtime is ON"
+        provider_call.assert_awaited_once()
+        assert capture_msg.answers == ["AI help"]
+    finally:
+        advisor_runtime.disable()
+    print("PASS: test_advisor_on_cmd_state_visible_to_capture_path")
+
+
+async def test_advisor_off_cmd_stops_capture_path():
+    """Verify /advisor_off command is immediately visible to _try_advisor_response."""
+    settings = _settings()
+    advisor_runtime.enable(settings)
+
+    # Owner sends /advisor_off
+    cmd_msg = _Message()
+    await advisor_off_cmd(cmd_msg, settings=settings)
+    assert advisor_runtime.status(settings).enabled is False
+
+    # Capture path must now skip advisor
+    draft = CaptureRouterService().classify_text("как пользоваться ботом")
+    provider_call = AsyncMock()
+    with patch("app.handlers.capture.run_advisor_for_draft", provider_call):
+        handled = await _try_advisor_response(
+            _Message(), MagicMock(), draft, MagicMock(), settings,
+        )
+    assert handled is False, "capture path must skip advisor when runtime is OFF"
+    provider_call.assert_not_awaited()
+    print("PASS: test_advisor_off_cmd_stops_capture_path")
+
+
 SYNC_TESTS = [test_runtime_default_is_off]
 ASYNC_TESTS = [
     test_status_with_disabled_env_is_safe_and_secret_free,
@@ -199,6 +253,8 @@ ASYNC_TESTS = [
     test_unauthorized_user_cannot_toggle_runtime,
     test_capture_skips_advisor_when_runtime_off,
     test_capture_allows_advisor_when_runtime_on_and_config_safe,
+    test_advisor_on_cmd_state_visible_to_capture_path,
+    test_advisor_off_cmd_stops_capture_path,
 ]
 
 
