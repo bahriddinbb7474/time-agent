@@ -14,6 +14,9 @@ def main():
             "20260612_0300_add_capture_drafts",
             "20260614_2000_add_api_usage",
             "20260615_1000_add_token_usage",
+            "20260616_0000_add_daily_targets",
+            "20260617_1200_capture_drafts_add_advisor_proposal",
+            "20260619_1200_add_daily_control_core",
         ]
 
         import sqlite3

@@ -23,6 +23,10 @@ EXPECTED_TABLES = {
     "daily_plans",
     "daily_target_definitions",
     "daily_target_progress",
+    "daily_schedules",
+    "time_blocks",
+    "activity_entries",
+    "checkins",
     "oauth_states",
     "prayer_times",
     "quran_progress",
@@ -76,6 +80,13 @@ def _assert_final_schema(
                 "daily_target_definitions",
                 "daily_target_progress",
             }
+        if "20260619_1200_add_daily_control_core" not in expected_versions:
+            tables_to_assert = tables_to_assert - {
+                "daily_schedules",
+                "time_blocks",
+                "activity_entries",
+                "checkins",
+            }
         assert tables_to_assert.issubset(_table_names(conn))
         assert "completed_at" in _columns(conn, "tasks")
         assert {"id", "plan_date", "text", "source", "created_at", "updated_at"}.issubset(
@@ -96,6 +107,13 @@ def _assert_final_schema(
                 "id", "target_id", "usage_date", "planned_value_snapshot",
                 "actual_value", "status", "note", "updated_at",
             }.issubset(_columns(conn, "daily_target_progress"))
+        if "20260617_1200_capture_drafts_add_advisor_proposal" in expected_versions:
+            assert "advisor_proposal_json" in _columns(conn, "capture_drafts")
+        if "20260619_1200_add_daily_control_core" in expected_versions:
+            for table_name in {
+                "daily_schedules", "time_blocks", "activity_entries", "checkins",
+            }:
+                assert table_name in _table_names(conn)
         assert _migration_versions(conn) == expected_versions
     finally:
         conn.close()
@@ -108,6 +126,8 @@ _ALL_REAL_VERSIONS = [
     "20260614_2000_add_api_usage",
     "20260615_1000_add_token_usage",
     "20260616_0000_add_daily_targets",
+    "20260617_1200_capture_drafts_add_advisor_proposal",
+    "20260619_1200_add_daily_control_core",
 ]
 
 

@@ -5,6 +5,7 @@ from datetime import date, datetime, time
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
@@ -557,3 +558,118 @@ class DailyTargetProgress(Base):
         "DailyTargetDefinition",
         back_populates="progress_entries",
     )
+
+
+class DailySchedule(Base):
+    __tablename__ = "daily_schedules"
+    __table_args__ = (
+        UniqueConstraint("user_id", "usage_date", name="uq_daily_schedules_user_date"),
+        Index("ix_daily_schedules_user_date", "user_id", "usage_date"),
+        Index("ix_daily_schedules_status", "status"),
+        CheckConstraint("version >= 1", name="ck_daily_schedules_version_positive"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    time_blocks: Mapped[list["TimeBlock"]] = relationship(
+        "TimeBlock",
+        back_populates="schedule",
+        cascade="all, delete-orphan",
+    )
+
+
+class TimeBlock(Base):
+    __tablename__ = "time_blocks"
+    __table_args__ = (
+        Index("ix_time_blocks_schedule_start", "schedule_id", "start_at"),
+        Index("ix_time_blocks_user_start", "user_id", "start_at"),
+        CheckConstraint("end_at > start_at", name="ck_time_blocks_valid_interval"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    schedule_id: Mapped[int] = mapped_column(
+        ForeignKey("daily_schedules.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    block_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    flexibility: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="planned")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    schedule: Mapped["DailySchedule"] = relationship(
+        "DailySchedule", back_populates="time_blocks"
+    )
+
+
+class ActivityEntry(Base):
+    __tablename__ = "activity_entries"
+    __table_args__ = (
+        Index("ix_activity_entries_user_date", "user_id", "usage_date"),
+        Index("ix_activity_entries_user_start", "user_id", "start_at"),
+        CheckConstraint("end_at > start_at", name="ck_activity_entries_valid_interval"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_activity_entries_confidence_range",
+        ),
+        CheckConstraint(
+            "waste_marked_by_owner = 0 OR owner_confirmed = 1",
+            name="ck_activity_entries_waste_owner_confirmed",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    owner_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    waste_marked_by_owner: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class Checkin(Base):
+    __tablename__ = "checkins"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "window_start", "window_end", name="uq_checkins_user_window"
+        ),
+        Index("ix_checkins_user_window", "user_id", "window_start"),
+        Index("ix_checkins_user_status", "user_id", "status"),
+        CheckConstraint("window_end > window_start", name="ck_checkins_valid_window"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    prompted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    answered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    response_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
