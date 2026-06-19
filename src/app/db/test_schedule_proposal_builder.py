@@ -71,7 +71,7 @@ async def test_builds_deterministic_idempotent_draft() -> None:
         assert first.proposal_type == PROPOSAL_TYPE
         assert first.schedule.status == "draft"
         assert first.version == 1
-        assert [block.title for block in first.blocks] == ["Sleep", "Task"]
+        assert [block.title for block in first.blocks] == ["Sleep", "Task", "Buffer"]
         assert second.schedule.id == first.schedule.id
         assert [block.id for block in second.blocks] == [block.id for block in first.blocks]
 
@@ -96,9 +96,78 @@ async def test_empty_proposal_and_validation() -> None:
             pass
 
 
+async def test_protected_priority_and_overload() -> None:
+    async with _session_ctx() as session:
+        builder = ScheduleProposalBuilder(session)
+        sleep = ProposalBlockInput(
+            start_at=datetime(2026, 6, 20, 0, tzinfo=TZ),
+            end_at=datetime(2026, 6, 20, 7, tzinfo=TZ),
+            title="Sleep",
+            category="sleep",
+            block_type="sleep",
+        )
+        prayer = ProposalBlockInput(
+            start_at=datetime(2026, 6, 20, 7, 15, tzinfo=TZ),
+            end_at=datetime(2026, 6, 20, 7, 35, tzinfo=TZ),
+            title="Prayer",
+            category="prayer",
+            block_type="prayer",
+        )
+        conflicting_task = ProposalBlockInput(
+            start_at=datetime(2026, 6, 20, 6, 30, tzinfo=TZ),
+            end_at=datetime(2026, 6, 20, 7, 30, tzinfo=TZ),
+            title="Overload",
+            category="work",
+            block_type="task",
+        )
+        proposal = await builder.build(
+            usage_date=USAGE_DATE,
+            user_id=USER_ID,
+            timezone=TZ_NAME,
+            block_inputs=[conflicting_task, prayer, sleep],
+        )
+
+        assert [block.block_type for block in proposal.blocks] == [
+            "sleep",
+            "prayer",
+            "buffer",
+        ]
+        assert len(proposal.unscheduled_items) == 1
+        assert proposal.unscheduled_items[0].item.title == "Overload"
+        assert "higher-priority sleep" in proposal.unscheduled_items[0].reason
+        buffer = proposal.blocks[-1]
+        assert buffer.end_at > buffer.start_at
+
+
+async def test_overlapping_protected_blocks_are_rejected() -> None:
+    async with _session_ctx() as session:
+        builder = ScheduleProposalBuilder(session)
+        try:
+            await builder.build(
+                usage_date=USAGE_DATE,
+                user_id=USER_ID,
+                timezone=TZ_NAME,
+                block_inputs=[
+                    _block(5, "Sleep", "sleep"),
+                    ProposalBlockInput(
+                        start_at=datetime(2026, 6, 20, 5, 30, tzinfo=TZ),
+                        end_at=datetime(2026, 6, 20, 6, 30, tzinfo=TZ),
+                        title="Prayer",
+                        category="prayer",
+                        block_type="prayer",
+                    ),
+                ],
+            )
+            raise AssertionError("overlapping protected blocks must fail")
+        except DailyControlValidationError:
+            pass
+
+
 async def main_async() -> None:
     await test_builds_deterministic_idempotent_draft()
     await test_empty_proposal_and_validation()
+    await test_protected_priority_and_overload()
+    await test_overlapping_protected_blocks_are_rejected()
 
 
 def main() -> None:
