@@ -11,7 +11,8 @@ Time-Agent is a Telegram bot for personal mental-load dispatching with context-a
 
 - 18.6-C0 through 18.7: DONE / production PASS.
 - Stage 19 LLM Capture Intelligence: DONE / production PASS / CLOSED.
-- **Stage 20**: Daily Control 24/7 — next; depends on Stage 19.
+- Stage 20.1 Daily Control Foundation: DONE / production PASS / CLOSED.
+- **Stage 20.2**: Schedule Proposal Builder — next; depends on Stage 20.1.
 - Stage 21: Task Lifecycle.
 - Stage 22: Production hardening + main DoD.
 - Stage 23: Idea Vault.
@@ -33,6 +34,7 @@ time-agent/
 │  │  ├─ today.py                     # /today, /siyam_on, /siyam_off
 │  │  ├─ rules.py                     # /rules
 │  │  ├─ targets.py                   # Daily targets commands (Stage 18.7)
+│  │  ├─ daily_control.py             # Daily Control command/callback wiring (Stage 20.1 foundation)
 │  │  ├─ capture.py                   # Voice and text capture drafts; advisor wiring (Stage 19)
 │  │  ├─ advisor.py                   # /advisor_status, /advisor_on, /advisor_off (Stage 19.9)
 │  │  ├─ usage.py                     # /usage API stats command
@@ -57,7 +59,9 @@ time-agent/
 │  │  ├─ advisor_usage_gate.py        # Pre-call LLM limit gate; records usage (Stage 19)
 │  │  ├─ advisor_presentation_service.py  # Format orchestration result for Telegram (Stage 19)
 │  │  ├─ advisor_proposal_validator.py    # Validate proposal against context/prayer rules (Stage 19)
-│  │  └─ ai_advisor_provider.py       # OpenRouter/fake/disabled providers; injection-safe prompt (Stage 19)
+│  │  ├─ ai_advisor_provider.py       # OpenRouter/fake/disabled providers; injection-safe prompt (Stage 19)
+│  │  ├─ daily_control_service.py     # Daily schedule / block / check-in domain services (Stage 20.1)
+│  │  └─ activity_accounting_service.py   # Interval accounting and activity rollups (Stage 20.1-C)
 │  ├─ scheduler/
 │  │  ├─ scheduler.py                 # APScheduler setup and alert recovery
 │  │  └─ jobs.py                      # Briefings, prayer cache, alert firing
@@ -105,6 +109,7 @@ time-agent/
 - `RelativesContactRule`: family contact cadence.
 - `DailyHealthContext`: Siyam/health policy.
 - `CrisisStack` and `CrisisStackTask`: early crisis/focus stack foundation.
+- `DailySchedule`, `TimeBlock`, `ActivityEntry`, `Checkin`: Daily Control foundation tables (Stage 20.1).
 
 ## Important Operational Files
 

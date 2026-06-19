@@ -1,7 +1,46 @@
 # Current State — Time-Agent
 
-> Last updated: Stage 19 FINAL (2026-06-19).
+> Last updated: Stage 20.1 CLOSED (2026-06-19).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
+
+## Stage 20.1 — Daily Control Foundation: CLOSED
+
+Stage 20.1-A/B/C is complete and production-verified.
+
+### What was built
+
+**Stage 20.1-A — core schema**
+- Production foundation schema added for Daily Control:
+  - `daily_schedules`
+  - `time_blocks`
+  - `activity_entries`
+  - `checkins`
+- Production baseline commit: `ee8d92f`.
+
+**Stage 20.1-B — domain services**
+- Daily Control domain service layer added for schedule/block/check-in storage and retrieval.
+- Production baseline commit: `6190b79`.
+
+**Stage 20.1-C — interval accounting**
+- Interval/accounting logic added to support activity tracking and rollup behavior.
+- Production baseline commit: `014d54f`.
+
+### Production verify result
+
+- Production HEAD: `014d54f`
+- DB integrity: `ok`
+- `daily_schedules_exists=1`
+- `time_blocks_exists=1`
+- `activity_entries_exists=1`
+- `checkins_exists=1`
+- Container logs: no traceback / error / exception during verify
+
+### Stage verdict
+
+- Stage 20.1: **CLOSED / PRODUCTION PASS**
+- Next stage: **Stage 20.2 — Schedule Proposal Builder**
+
+---
 
 ## Stage 19 — LLM Capture Intelligence: CLOSED
 
@@ -89,9 +128,9 @@ text message
 
 ---
 
-## Next: Stage 20 — Daily Control 24/7
+## Next: Stage 20.2 — Schedule Proposal Builder
 
-Stage 20 is the next planned stage per the canonical roadmap.
+Stage 20.1 foundation is closed. The next planned step is Stage 20.2.
 
 ---
 

@@ -6,10 +6,10 @@
 
 ## Current Stage
 
-- Stage 19 LLM Capture Intelligence: **CLOSED / PRODUCTION PASS**.
-- Repository HEAD: `3da67f9` (stage19.9: connect advisor switch to capture flow).
-- Production HEAD (last deployed): `3da67f9`.
-- Next: Stage 20 Daily Control 24/7.
+- Stage 20.1 Daily Control Foundation: **CLOSED / PRODUCTION PASS**.
+- Repository production baseline: `014d54f` (Stage 20.1-A/B/C complete).
+- Production HEAD (last deployed): `014d54f`.
+- Next: Stage 20.2 Schedule Proposal Builder.
 
 ## Completed Stages
 
@@ -18,10 +18,11 @@
 - 18.6-D: DONE / production PASS.
 - 18.7: DONE / Daily Targets MVP production PASS.
 - 19.1–19.9: DONE / LLM Capture Intelligence CLOSED. See `docs/CURRENT_STATE.md`.
+- 20.1-A/B/C: DONE / Daily Control Foundation CLOSED. See `docs/CURRENT_STATE.md`.
 
 ## Current Route
 
-- **Stage 20**: Daily Control 24/7 — next.
+- **Stage 20.2**: Schedule Proposal Builder — next.
 - Stage 21: Task Lifecycle.
 - Stage 22: Production hardening + main DoD.
 - Stage 23: Idea Vault.
