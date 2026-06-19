@@ -53,3 +53,20 @@ def build_schedule_edit_keyboard(schedule: DailySchedule) -> InlineKeyboardMarku
             ]
         ]
     )
+
+
+def build_confirmed_schedule_keyboard(schedule: DailySchedule) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✏️ Edit",
+                    callback_data=schedule_review_callback("edit", schedule),
+                ),
+                InlineKeyboardButton(
+                    text="🔄 Rebuild draft",
+                    callback_data=schedule_review_callback("rebuild", schedule),
+                ),
+            ]
+        ]
+    )

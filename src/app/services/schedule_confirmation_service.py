@@ -44,6 +44,16 @@ class ScheduleConfirmationService:
             version=version,
         )
 
+    async def get_confirmed_for_date(
+        self, *, user_id: int, usage_date: date
+    ) -> DailySchedule | None:
+        schedule = await self.schedules.get(
+            user_id=user_id, usage_date=usage_date
+        )
+        if schedule is None or schedule.status != "confirmed":
+            return None
+        return schedule
+
     async def confirm(
         self,
         *,

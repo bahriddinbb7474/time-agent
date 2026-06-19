@@ -11,6 +11,7 @@ from app.config import load_config
 from app.core.time import now_tz
 from app.keyboards.schedule_review import (
     CALLBACK_PREFIX,
+    build_confirmed_schedule_keyboard,
     build_schedule_edit_keyboard,
     build_schedule_review_keyboard,
 )
@@ -49,9 +50,23 @@ async def schedule_tomorrow_cmd(
     settings = settings or load_config()
     if not _is_owner(message, settings):
         return
+    usage_date = now_tz().date() + timedelta(days=1)
+    confirmed = await ScheduleConfirmationService(session).get_confirmed_for_date(
+        user_id=settings.allowed_telegram_id,
+        usage_date=usage_date,
+    )
+    if confirmed is not None:
+        proposal = await _proposal_from_schedule(
+            session, confirmed, settings.allowed_telegram_id, settings.tz
+        )
+        await message.answer(
+            format_schedule_proposal(proposal),
+            reply_markup=build_confirmed_schedule_keyboard(confirmed),
+        )
+        return
     try:
         proposal = await ScheduleProposalBuilder(session).build(
-            usage_date=now_tz().date() + timedelta(days=1),
+            usage_date=usage_date,
             user_id=settings.allowed_telegram_id,
             timezone=settings.tz,
         )

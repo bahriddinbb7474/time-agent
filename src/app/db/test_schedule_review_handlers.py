@@ -2,16 +2,44 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+import tempfile
+from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.db.models import Base, TimeBlock
 from app.handlers.schedule_review import schedule_tomorrow_cmd
 from app.keyboards.schedule_review import CALLBACK_PREFIX, build_schedule_review_keyboard
-from app.services.daily_control_service import DailyControlValidationError
+from app.services.daily_control_service import (
+    DailyControlValidationError,
+    DailyScheduleService,
+    TimeBlockService,
+)
 
 
 OWNER_ID = 123456789
+TZ = timezone(timedelta(hours=5))
+
+
+@asynccontextmanager
+async def _session_ctx():
+    with tempfile.TemporaryDirectory(prefix="time_agent_review_handler_") as tmp:
+        engine = create_async_engine(
+            f"sqlite+aiosqlite:///{(Path(tmp) / 'handler.db').as_posix()}"
+        )
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        try:
+            async with Session() as session:
+                yield session
+        finally:
+            await engine.dispose()
 
 
 class _Message:
@@ -57,7 +85,13 @@ async def test_owner_command_builds_tomorrow_draft_and_formats_it() -> None:
     builder = MagicMock()
     builder.build = AsyncMock(return_value=proposal)
     fixed_now = SimpleNamespace(date=lambda: date(2026, 6, 20))
+    confirmation = MagicMock()
+    confirmation.get_confirmed_for_date = AsyncMock(return_value=None)
     with (
+        patch(
+            "app.handlers.schedule_review.ScheduleConfirmationService",
+            return_value=confirmation,
+        ),
         patch("app.handlers.schedule_review.ScheduleProposalBuilder", return_value=builder),
         patch("app.handlers.schedule_review.format_schedule_proposal", return_value="summary"),
         patch("app.handlers.schedule_review.now_tz", return_value=fixed_now),
@@ -87,9 +121,17 @@ async def test_builder_validation_error_replies_fail_closed() -> None:
     builder.build = AsyncMock(
         side_effect=DailyControlValidationError("protected overlap details")
     )
-    with patch(
-        "app.handlers.schedule_review.ScheduleProposalBuilder",
-        return_value=builder,
+    confirmation = MagicMock()
+    confirmation.get_confirmed_for_date = AsyncMock(return_value=None)
+    with (
+        patch(
+            "app.handlers.schedule_review.ScheduleConfirmationService",
+            return_value=confirmation,
+        ),
+        patch(
+            "app.handlers.schedule_review.ScheduleProposalBuilder",
+            return_value=builder,
+        ),
     ):
         await schedule_tomorrow_cmd(message, MagicMock(), settings=_settings())
 
@@ -101,10 +143,80 @@ async def test_builder_validation_error_replies_fail_closed() -> None:
     assert reply_markup is None
 
 
+async def test_confirmed_schedule_is_shown_without_calling_builder() -> None:
+    message = _Message()
+    confirmed = SimpleNamespace(
+        id=7,
+        version=1,
+        usage_date=date(2026, 6, 21),
+        status="confirmed",
+    )
+    proposal = SimpleNamespace(schedule=confirmed)
+    confirmation = MagicMock()
+    confirmation.get_confirmed_for_date = AsyncMock(return_value=confirmed)
+    builder = MagicMock()
+    builder.build = AsyncMock(
+        side_effect=DailyControlValidationError("builder must not run")
+    )
+    fixed_now = SimpleNamespace(date=lambda: date(2026, 6, 20))
+    with (
+        patch(
+            "app.handlers.schedule_review.ScheduleConfirmationService",
+            return_value=confirmation,
+        ),
+        patch("app.handlers.schedule_review.ScheduleProposalBuilder", return_value=builder),
+        patch("app.handlers.schedule_review._proposal_from_schedule", AsyncMock(return_value=proposal)),
+        patch("app.handlers.schedule_review.format_schedule_proposal", return_value="confirmed summary"),
+        patch("app.handlers.schedule_review.now_tz", return_value=fixed_now),
+    ):
+        await schedule_tomorrow_cmd(message, MagicMock(), settings=_settings())
+
+    builder.build.assert_not_awaited()
+    assert message.answers[0][0] == "confirmed summary"
+    buttons = [
+        button
+        for row in message.answers[0][1].inline_keyboard
+        for button in row
+    ]
+    assert [button.text for button in buttons] == ["✏️ Edit", "🔄 Rebuild draft"]
+
+
+async def test_repeated_confirmed_command_does_not_duplicate_blocks() -> None:
+    async with _session_ctx() as session:
+        schedule = await DailyScheduleService(session).create(
+            user_id=OWNER_ID,
+            usage_date=date(2026, 6, 21),
+            status="confirmed",
+        )
+        await TimeBlockService(session).create(
+            schedule_id=schedule.id,
+            user_id=OWNER_ID,
+            start_at=datetime(2026, 6, 21, 9, tzinfo=TZ),
+            end_at=datetime(2026, 6, 21, 10, tzinfo=TZ),
+            title="Existing task",
+            category="work",
+            block_type="task",
+            flexibility="fixed",
+            source_type="test",
+        )
+        version_before = schedule.version
+        fixed_now = SimpleNamespace(date=lambda: date(2026, 6, 20))
+        with patch("app.handlers.schedule_review.now_tz", return_value=fixed_now):
+            await schedule_tomorrow_cmd(_Message(), session, settings=_settings())
+            await schedule_tomorrow_cmd(_Message(), session, settings=_settings())
+
+        count = await session.scalar(select(func.count()).select_from(TimeBlock))
+        assert count == 1
+        assert schedule.status == "confirmed"
+        assert schedule.version == version_before
+
+
 async def main_async() -> None:
     await test_owner_command_builds_tomorrow_draft_and_formats_it()
     await test_non_owner_command_is_ignored()
     await test_builder_validation_error_replies_fail_closed()
+    await test_confirmed_schedule_is_shown_without_calling_builder()
+    await test_repeated_confirmed_command_does_not_duplicate_blocks()
 
 
 def main() -> None:
