@@ -1,7 +1,58 @@
 # Current State — Time-Agent
 
-> Last updated: Stage 20.1 CLOSED (2026-06-19).
+> Last updated: Stage 20.2 CLOSED (2026-06-19).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
+
+## Stage 20.2 — Schedule Proposal Builder: CLOSED
+
+Stage 20.2-A/B/C/D is complete and production-deployed by owner.
+
+### What was built
+
+**Stage 20.2-A — proposal builder skeleton**
+- Deterministic schedule proposal builder added.
+- Proposal draft behavior is idempotent.
+- No auto-confirm path.
+- Production baseline commit: `bc1b9cf`.
+
+**Stage 20.2-B — protected slots**
+- Prayer and sleep windows are enforced as protected slots.
+- Overload is routed into `unscheduled_items` instead of forcing invalid placement.
+- Builder keeps a 10% buffer target.
+- Production baseline commit: `2852ac0`.
+
+**Stage 20.2-C — input integration**
+- Proposal input collector added.
+- Uses cached prayer times, sleep routines, and timed tasks.
+- No network dependency and no OpenRouter usage.
+- Production baseline commit: `4c269e1`.
+
+**Stage 20.2-D — formatter**
+- Privacy-aware schedule proposal formatter added.
+- Summary output is capped at 15 lines.
+- No Telegram handler wiring or scheduler wiring yet.
+- Production baseline commit: `e398861`.
+
+### Production state
+
+- Production HEAD: `e398861`
+- Stage verdict: **CLOSED / PRODUCTION PASS**
+- Next stage: **Stage 20.3 — Confirmation UX / schedule proposal review**
+
+### Stage 20 safety boundaries
+
+- Stage 20.1 foundation remains the base data layer:
+  - `daily_schedules`
+  - `time_blocks`
+  - `activity_entries`
+  - `checkins`
+- Stage 20.2 remains deterministic and local-only:
+  - no network calls
+  - no OpenRouter calls
+  - no auto-confirm
+  - no Telegram/scheduler wiring yet
+
+---
 
 ## Stage 20.1 — Daily Control Foundation: CLOSED
 
@@ -107,6 +158,7 @@ LLM_DAILY_COST_USD_LIMIT=0.05    # hard gate; 0.0 = unlimited (unsafe)
 - Provider: `openrouter` (configured, key present).
 - Limits: request limit 10 / cost limit $0.05 / day.
 - Production is safe: ordinary capture works via rules path. Advisor inactive until owner sends `/advisor_on`.
+- No OpenRouter calls happen unless owner enables Advisor manually.
 
 ### Capture flow summary (current)
 
@@ -128,9 +180,9 @@ text message
 
 ---
 
-## Next: Stage 20.2 — Schedule Proposal Builder
+## Next: Stage 20.3 — Confirmation UX / schedule proposal review
 
-Stage 20.1 foundation is closed. The next planned step is Stage 20.2.
+Stage 20.2 proposal builder is closed. The next planned step is Stage 20.3.
 
 ---
 

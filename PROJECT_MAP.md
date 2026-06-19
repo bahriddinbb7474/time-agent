@@ -12,7 +12,8 @@ Time-Agent is a Telegram bot for personal mental-load dispatching with context-a
 - 18.6-C0 through 18.7: DONE / production PASS.
 - Stage 19 LLM Capture Intelligence: DONE / production PASS / CLOSED.
 - Stage 20.1 Daily Control Foundation: DONE / production PASS / CLOSED.
-- **Stage 20.2**: Schedule Proposal Builder — next; depends on Stage 20.1.
+- Stage 20.2 Schedule Proposal Builder: DONE / production PASS / CLOSED.
+- **Stage 20.3**: Confirmation UX / schedule proposal review — next; depends on Stage 20.2.
 - Stage 21: Task Lifecycle.
 - Stage 22: Production hardening + main DoD.
 - Stage 23: Idea Vault.
@@ -61,7 +62,10 @@ time-agent/
 │  │  ├─ advisor_proposal_validator.py    # Validate proposal against context/prayer rules (Stage 19)
 │  │  ├─ ai_advisor_provider.py       # OpenRouter/fake/disabled providers; injection-safe prompt (Stage 19)
 │  │  ├─ daily_control_service.py     # Daily schedule / block / check-in domain services (Stage 20.1)
-│  │  └─ activity_accounting_service.py   # Interval accounting and activity rollups (Stage 20.1-C)
+│  │  ├─ activity_accounting_service.py   # Interval accounting and activity rollups (Stage 20.1-C)
+│  │  ├─ schedule_proposal_builder.py     # Deterministic proposal builder with protected slots (Stage 20.2)
+│  │  ├─ schedule_input_collector.py      # Cached prayer/sleep/timed-task proposal inputs (Stage 20.2-C)
+│  │  └─ schedule_proposal_formatter.py   # Privacy-aware proposal summary formatter, max 15 lines (Stage 20.2-D)
 │  ├─ scheduler/
 │  │  ├─ scheduler.py                 # APScheduler setup and alert recovery
 │  │  └─ jobs.py                      # Briefings, prayer cache, alert firing
@@ -110,6 +114,7 @@ time-agent/
 - `DailyHealthContext`: Siyam/health policy.
 - `CrisisStack` and `CrisisStackTask`: early crisis/focus stack foundation.
 - `DailySchedule`, `TimeBlock`, `ActivityEntry`, `Checkin`: Daily Control foundation tables (Stage 20.1).
+- `ScheduleProposalDraft`: deterministic scheduling draft behavior built on Stage 20.1 data; no auto-confirm or Telegram wiring yet (Stage 20.2).
 
 ## Important Operational Files
 
