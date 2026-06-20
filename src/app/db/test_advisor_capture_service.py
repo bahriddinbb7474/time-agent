@@ -22,7 +22,7 @@ import asyncio
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -37,7 +37,7 @@ if "PYTHONTZPATH" not in os.environ and _WIN_ZONEINFO.exists():
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.time import now_tz
-from app.db.models import Base, CaptureDraftRecord
+from app.db.models import ActivityEntry, Base, CaptureDraftRecord, Checkin
 from app.services.advisor_capture_service import (
     advisor_needed,
     build_safe_advisor_proposal_json,
@@ -658,6 +658,57 @@ async def test_advisor_callback_confirm_boss_creates_task():
         tmp.cleanup()
 
 
+async def test_advisor_callback_confirm_activity_creates_only_after_confirmation():
+    tmp, engine, Session = await _setup_session()
+    try:
+        async with Session() as session:
+            now = now_tz()
+            checkin = Checkin(
+                user_id=USER_ID,
+                usage_date=now.date(),
+                window_start=now - timedelta(minutes=30),
+                window_end=now + timedelta(minutes=30),
+                prompted_at=now - timedelta(minutes=1),
+                status="sent",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(checkin)
+            await session.commit()
+
+            service = CaptureDraftService(session)
+            draft = CaptureDraft(kind=CAPTURE_KIND_LATER, text="Работал над отчётом")
+            await service.create_pending_draft(
+                chat_id=CHAT_ID,
+                user_id=USER_ID,
+                draft=draft,
+                source="voice",
+                transcript=draft.text,
+                advisor_proposal_json=_advisor_json(
+                    proposal_type="activity", title="Работал над отчётом",
+                ),
+            )
+            before = await session.execute(select(ActivityEntry))
+            assert list(before.scalars().all()) == []
+
+            cb = _FakeCallback("confirm_activity")
+            await advisor_capture_callback(cb, session, scheduler=None)
+
+            result = await session.execute(select(ActivityEntry))
+            activity = result.scalar_one()
+            assert activity.title == "Работал над отчётом"
+            assert activity.source == "voice_llm"
+            assert activity.owner_confirmed is True
+            assert activity.waste_marked_by_owner is False
+            await session.refresh(checkin)
+            assert checkin.status == "answered"
+            assert checkin.response_mode == "voice_activity"
+        print("PASS: test_advisor_callback_confirm_activity_creates_only_after_confirmation")
+    finally:
+        await engine.dispose()
+        tmp.cleanup()
+
+
 async def test_advisor_callback_confirm_settings_does_not_mutate_targets():
     tmp, engine, Session = await _setup_session()
     try:
@@ -761,7 +812,7 @@ async def test_advisor_callback_ask_clarification_safe():
 def test_advisor_callback_data_length_under_telegram_limit():
     actions = [
         "confirm_task", "confirm_later", "confirm_boss",
-        "confirm_settings_change", "ask_clarification", "cancel",
+        "confirm_activity", "confirm_settings_change", "ask_clarification", "cancel",
     ]
     for action in actions:
         data = build_advisor_callback_data(action)
@@ -804,6 +855,7 @@ ASYNC_TESTS = [
     test_advisor_callback_confirm_later_creates_task,
     test_advisor_callback_confirm_task_creates_task,
     test_advisor_callback_confirm_boss_creates_task,
+    test_advisor_callback_confirm_activity_creates_only_after_confirmation,
     test_advisor_callback_confirm_settings_does_not_mutate_targets,
     test_advisor_callback_rejects_action_type_mismatch,
     test_advisor_callback_no_second_llm_call,

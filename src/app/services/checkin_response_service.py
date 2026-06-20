@@ -85,6 +85,42 @@ class CheckinResponseService:
         await self.session.refresh(checkin)
         return checkin
 
+    async def record_confirmed_activity(
+        self, *, checkin_id: int, user_id: int, title: str, category: str = "other"
+    ) -> Checkin:
+        value = " ".join((title or "").split())
+        if not value or len(value) > 256:
+            raise DailyControlValidationError(
+                "confirmed activity must contain 1 to 256 characters"
+            )
+        result = await self.session.execute(
+            select(Checkin).where(Checkin.id == checkin_id, Checkin.user_id == user_id)
+        )
+        checkin = result.scalar_one_or_none()
+        if checkin is None:
+            raise DailyControlNotFoundError(f"Checkin id={checkin_id} not found")
+        if checkin.status == "answered" and checkin.response_mode == "voice_activity":
+            return checkin
+        if checkin.status not in {"sent", "open"}:
+            raise DailyControlValidationError("check-in cannot accept activity")
+        await ActivityEntryService(self.session).create(
+            user_id=user_id,
+            start_at=checkin.window_start.replace(tzinfo=now_tz().tzinfo),
+            end_at=checkin.window_end.replace(tzinfo=now_tz().tzinfo),
+            title=value,
+            category=category,
+            source="voice_llm",
+            owner_confirmed=True,
+            waste_marked_by_owner=False,
+        )
+        checkin.status = "answered"
+        checkin.response_mode = "voice_activity"
+        checkin.answered_at = now_tz()
+        checkin.updated_at = checkin.answered_at
+        await self.session.commit()
+        await self.session.refresh(checkin)
+        return checkin
+
     async def _apply(
         self, *, checkin_id: int, user_id: int, status: str, response_mode: str
     ) -> Checkin:

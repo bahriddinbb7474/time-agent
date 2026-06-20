@@ -28,6 +28,7 @@ _ADVISOR_ACTION_LABELS: dict[str, str] = {
     "confirm_task": "Создать задачу (AI)",
     "confirm_later": "На потом (AI)",
     "confirm_boss": "Boss (AI)",
+    "confirm_activity": "Подтвердить активность (AI)",
     "confirm_settings_change": "Применить (AI)",
     "ask_clarification": "Уточнить",
     "cancel": "Отмена",

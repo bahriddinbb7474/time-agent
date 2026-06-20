@@ -19,6 +19,7 @@ from app.services.ai_advisor_provider import AdvisorProposal
 ACTION_CONFIRM_TASK = "confirm_task"
 ACTION_CONFIRM_LATER = "confirm_later"
 ACTION_CONFIRM_BOSS = "confirm_boss"
+ACTION_CONFIRM_ACTIVITY = "confirm_activity"
 ACTION_CONFIRM_SETTINGS_CHANGE = "confirm_settings_change"
 ACTION_ASK_CLARIFICATION = "ask_clarification"
 ACTION_CANCEL = "cancel"
@@ -109,6 +110,19 @@ def _format_boss(proposal: AdvisorProposal) -> AdvisorPresentationResult:
     )
 
 
+def _format_activity(proposal: AdvisorProposal) -> AdvisorPresentationResult:
+    title = proposal.title or "Активность"
+    category = proposal.category or "other"
+    return AdvisorPresentationResult(
+        text=f"Предлагаю записать факт активности: {title} [{category}]",
+        requires_confirmation=True,
+        primary_action=ACTION_CONFIRM_ACTIVITY,
+        secondary_actions=[ACTION_CANCEL],
+        reason_code="activity",
+        safe_to_show=True,
+    )
+
+
 def _format_settings(proposal: AdvisorProposal) -> AdvisorPresentationResult:
     name = proposal.target_name or "параметр"
     value = proposal.target_value or "?"
@@ -147,6 +161,9 @@ def _format_by_type(
 
     if pt == "boss":
         return _format_boss(proposal)
+
+    if pt == "activity":
+        return _format_activity(proposal)
 
     if pt == "settings_change":
         return _format_settings(proposal)

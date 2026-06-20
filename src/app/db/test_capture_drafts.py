@@ -401,7 +401,7 @@ async def test_disabled_voice_does_not_download_or_create_draft() -> None:
         tmp.cleanup()
 
 
-async def test_voice_fake_stt_creates_db_draft_without_task() -> None:
+async def test_voice_fake_stt_fails_closed_without_advisor() -> None:
     tmp, engine, Session = await _setup_session()
     try:
         async with Session() as session:
@@ -429,17 +429,13 @@ async def test_voice_fake_stt_creates_db_draft_without_task() -> None:
             assert stt_provider.audio_parent is not None
             assert not stt_provider.audio_parent.exists()
             assert len(message.answers) == 1
-            assert message.answers[0][1] is not None
+            assert message.answers[0][0]
+            assert message.answers[0][1] is None
             assert await _count_tasks(session) == 0
 
             result = await session.execute(select(CaptureDraftRecord))
             drafts = list(result.scalars().all())
-            assert len(drafts) == 1
-            draft = drafts[0]
-            assert draft.source == CAPTURE_DRAFT_SOURCE_VOICE
-            assert draft.raw_text == "personal Позвонить маме"
-            assert draft.transcript == "personal Позвонить маме"
-            assert draft.suggested_type == CAPTURE_KIND_TASK
+            assert drafts == []
     finally:
         await engine.dispose()
         tmp.cleanup()
@@ -910,9 +906,7 @@ async def test_openrouter_usage_savepoint_isolation() -> None:
 
             draft_result = await session.execute(select(CaptureDraftRecord))
             drafts = list(draft_result.scalars().all())
-            assert len(drafts) == 1, (
-                f"draft must be created even when usage recording fails, got {len(drafts)}"
-            )
+            assert drafts == [], "runtime-off voice must fail closed"
             assert await _count_usage_rows(session) == 0, "no usage row when write failed"
     finally:
         await engine.dispose()
@@ -1022,7 +1016,7 @@ async def main_async() -> None:
     await test_cancel_and_unknown_do_not_create_tasks()
     await test_ttl_expiration_waits_for_owner_before_later()
     await test_disabled_voice_does_not_download_or_create_draft()
-    await test_voice_fake_stt_creates_db_draft_without_task()
+    await test_voice_fake_stt_fails_closed_without_advisor()
     await test_voice_limits_reject_before_download()
     await test_voice_telegram_download_error_gives_safe_message()
     await test_voice_unexpected_provider_exception_gives_safe_message()

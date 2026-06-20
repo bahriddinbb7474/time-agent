@@ -28,7 +28,7 @@ from app.services.validation_result import ValidationStatus
 
 log = logging.getLogger("time-agent.advisor.validator")
 
-_ACTIONABLE_TYPES = frozenset({"task", "later", "boss", "settings_change"})
+_ACTIONABLE_TYPES = frozenset({"task", "later", "boss", "activity", "settings_change"})
 
 
 # ── Result DTO ────────────────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ async def validate_advisor_proposal(
         return _pass_through(proposal, needs_clarification=True)
 
     # ── Task / Later / Boss ───────────────────────────────────────────────────
-    if pt in ("task", "later", "boss"):
+    if pt in ("task", "later", "boss", "activity"):
         return await _validate_task_like(
             proposal, now_dt=now_dt, context_validator=context_validator
         )

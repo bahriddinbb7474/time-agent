@@ -44,6 +44,8 @@ from app.services.advisor_presentation_service import format_advisor_result
 from app.services.advisor_runtime_service import advisor_runtime
 from app.services.api_limit_service import ApiLimitService
 from app.services.api_usage_service import ApiUsageService
+from app.services.checkin_context_service import CheckinContextService
+from app.services.checkin_response_service import CheckinResponseService
 from app.services.stt_provider import DisabledSTTProvider, OpenRouterSTTProvider, get_stt_provider
 from app.services.voice_capture_safety import (
     downloaded_voice_temp_path,
@@ -119,9 +121,10 @@ async def _try_advisor_response(
     *,
     source: str = "text",
     transcript: str | None = None,
+    force: bool = False,
 ) -> bool:
     """Try to show an advisor response. Returns True if handled, False to fall through."""
-    if not advisor_needed(draft):
+    if not force and not advisor_needed(draft):
         return False
 
     runtime_status = advisor_runtime.status(settings)
@@ -334,21 +337,12 @@ async def capture_voice_message(
         message, session, draft, draft_service, settings,
         source=CAPTURE_DRAFT_SOURCE_VOICE,
         transcript=transcript,
+        force=True,
     )
     if handled:
         return
-
-    await draft_service.create_pending_draft(
-        chat_id=message.chat.id,
-        user_id=message.from_user.id,
-        draft=draft,
-        source=CAPTURE_DRAFT_SOURCE_VOICE,
-        transcript=transcript,
-    )
-
     await message.answer(
-        build_capture_confirmation_text(draft),
-        reply_markup=build_capture_confirmation_keyboard(),
+        "Голос распознан, но AI-разбор выключен или недоступен. Ничего не сохранено."
     )
 
 
@@ -599,6 +593,7 @@ async def advisor_capture_callback(
         "confirm_later": "later",
         "confirm_boss": "boss",
         "confirm_task": "task",
+        "confirm_activity": "activity",
         "confirm_settings_change": "settings_change",
     }.get(action)
     if expected_proposal_type and proposal.get("proposal_type") != expected_proposal_type:
@@ -644,6 +639,32 @@ async def advisor_capture_callback(
         await draft_service.mark_confirmed(pending_record)
         await _finalize_capture_ui(callback)
         await callback.message.answer(result.user_message)
+        await callback.answer()
+        return
+
+    if action == "confirm_activity":
+        checkin = await CheckinContextService(session).get_active(
+            user_id=callback.from_user.id,
+        )
+        if checkin is None:
+            await draft_service.mark_cancelled(pending_record)
+            await _finalize_capture_ui(callback)
+            await callback.message.answer(
+                "Активный check-in не найден. Ничего не сохранено."
+            )
+            await callback.answer()
+            return
+        title = proposal.get("title") or pending_record.raw_text
+        category = proposal.get("category") or "other"
+        await CheckinResponseService(session).record_confirmed_activity(
+            checkin_id=checkin.id,
+            user_id=callback.from_user.id,
+            title=title,
+            category=category,
+        )
+        await draft_service.mark_confirmed(pending_record)
+        await _finalize_capture_ui(callback)
+        await callback.message.answer("Активность подтверждена.")
         await callback.answer()
         return
 
