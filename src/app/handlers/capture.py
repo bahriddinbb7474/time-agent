@@ -66,6 +66,13 @@ _STT_LOCK: asyncio.Lock = asyncio.Lock()
 TYPED_FREE_TEXT_POLICY = "rules_first_then_existing_capture"
 
 
+def _accepted_stt_transcript(result) -> str | None:
+    if result is None or not result.enabled or not isinstance(result.text, str):
+        return None
+    transcript = result.text.strip()
+    return transcript or None
+
+
 def build_capture_confirmation_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -283,11 +290,12 @@ async def capture_voice_message(
             )
 
     # Lock released; result is always set here (all error paths return above)
-    if not result.enabled or not result.text:
+    transcript = _accepted_stt_transcript(result)
+    if transcript is None:
         await message.answer(result.user_message)
         return
 
-    draft = CaptureRouterService().classify_text(result.text)
+    draft = CaptureRouterService().classify_text(transcript)
     if draft.kind == CAPTURE_KIND_IGNORE:
         await message.answer(result.user_message)
         return
@@ -325,7 +333,7 @@ async def capture_voice_message(
     handled = await _try_advisor_response(
         message, session, draft, draft_service, settings,
         source=CAPTURE_DRAFT_SOURCE_VOICE,
-        transcript=result.text,
+        transcript=transcript,
     )
     if handled:
         return
@@ -335,7 +343,7 @@ async def capture_voice_message(
         user_id=message.from_user.id,
         draft=draft,
         source=CAPTURE_DRAFT_SOURCE_VOICE,
-        transcript=result.text,
+        transcript=transcript,
     )
 
     await message.answer(
