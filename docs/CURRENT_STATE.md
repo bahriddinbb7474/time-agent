@@ -1,7 +1,61 @@
 # Current State — Time-Agent
 
-> Last updated: Stage 20.3 CLOSED (2026-06-20).
+> Last updated: Stage 20.4 CLOSED (2026-06-20).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
+
+## Stage 20.4 — Check-in Scheduler / periodic plan control: CLOSED
+
+Stage 20.4 is complete and production-verified.
+
+### What was built
+
+**Stage 20.4 — policy, scheduler, Telegram, accounting**
+- Durable 60/120-minute check-in policy foundation added.
+- Restart-safe scheduler recovery added for check-in jobs.
+- Owner-only Telegram check-in callbacks added.
+- Accounting integration added for `aligned` / `unknown` / `deferred`.
+- No fake activity is created.
+- No auto-waste behavior is introduced.
+- No OpenRouter or LLM usage in this stage.
+- Production baseline commits:
+  - `18ad27e` — check-in policy foundation
+  - `c8a5ccf` — scheduler recovery
+  - `fb27cd9` — Telegram callbacks
+  - `814d837` — accounting integration
+  - `b0b54ff` — smoke contract
+  - `08798c4` — migration registry/context fix
+  - `79192d2` — owner `/checkin_test` smoke command
+
+### Production verify result
+
+- Production HEAD: `79192d2`
+- DB integrity: `ok`
+- `checkins` table exists
+- checkins created: `24`
+- pending/deferred records present
+- protected sleep/prayer slots are deferred
+- scheduler contains `run_checkin_job` jobs
+- `/health` ok
+- `/schedule_tomorrow` still shows confirmed schedule
+- `/checkin_test` sends a real check-in message
+- Callback results verified:
+  - `✅ Всё по плану` → `answered/aligned`
+  - `❓ Не помню` → `answered/unknown`, no fake activity
+  - `⏸ Отложить` → `deferred`
+- Container logs: no traceback / error / exception during verify
+
+### Stage 20.4 boundaries
+
+- No OpenRouter calls
+- No LLM usage
+- Advisor runtime remains default OFF
+
+### Stage verdict
+
+- Stage 20.4: **CLOSED / PRODUCTION PASS**
+- Next stage: **Stage 20.5 — Rules-first ответы**
+
+---
 
 ## Stage 20.3 — Confirmation UX / Schedule Proposal Review: CLOSED
 
@@ -233,9 +287,9 @@ text message
 
 ---
 
-## Next: Stage 20.4 — Check-in Scheduler / periodic plan control
+## Next: Stage 20.5 — Rules-first ответы
 
-Stage 20.3 confirmation/review is closed. The next planned step is Stage 20.4.
+Stage 20.4 check-in scheduler is closed. The next planned step is Stage 20.5.
 
 ---
 

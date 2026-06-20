@@ -14,7 +14,8 @@ Time-Agent is a Telegram bot for personal mental-load dispatching with context-a
 - Stage 20.1 Daily Control Foundation: DONE / production PASS / CLOSED.
 - Stage 20.2 Schedule Proposal Builder: DONE / production PASS / CLOSED.
 - Stage 20.3 Confirmation UX / schedule proposal review: DONE / production PASS / CLOSED.
-- **Stage 20.4**: Check-in Scheduler / periodic plan control — next; depends on Stage 20.3.
+- Stage 20.4 Check-in Scheduler / periodic plan control: DONE / production PASS / CLOSED.
+- **Stage 20.5**: Rules-first ответы — next; depends on Stage 20.4.
 - Stage 21: Task Lifecycle.
 - Stage 22: Production hardening + main DoD.
 - Stage 23: Idea Vault.
@@ -68,7 +69,9 @@ time-agent/
 │  │  ├─ schedule_input_collector.py      # Cached prayer/sleep/timed-task proposal inputs (Stage 20.2-C)
 │  │  ├─ schedule_proposal_formatter.py   # Privacy-aware proposal summary formatter, max 15 lines (Stage 20.2-D)
 │  │  ├─ schedule_confirmation_service.py # Durable confirmation/review flow for schedule drafts (Stage 20.3)
-│  │  └─ schedule_edit_service.py         # Safe edit foundation/stub; fail-closed until real edit flow (Stage 20.3)
+│  │  ├─ schedule_edit_service.py         # Safe edit foundation/stub; fail-closed until real edit flow (Stage 20.3)
+│  │  ├─ checkin_policy_service.py        # Durable 60/120-minute check-in policy foundation (Stage 20.4)
+│  │  └─ checkin_accounting_service.py    # aligned/unknown/deferred accounting with no fake activity (Stage 20.4)
 │  ├─ scheduler/
 │  │  ├─ scheduler.py                 # APScheduler setup and alert recovery
 │  │  └─ jobs.py                      # Briefings, prayer cache, alert firing
@@ -119,6 +122,7 @@ time-agent/
 - `DailySchedule`, `TimeBlock`, `ActivityEntry`, `Checkin`: Daily Control foundation tables (Stage 20.1).
 - `ScheduleProposalDraft`: deterministic scheduling draft behavior built on Stage 20.1 data; no auto-confirm or Telegram wiring yet (Stage 20.2).
 - `ConfirmedScheduleReview`: durable owner confirmation/rebuild lifecycle on top of proposal drafts; no scheduler or morning briefing wiring yet (Stage 20.3).
+- `Checkin`: durable periodic plan-control records with pending/deferred/answered lifecycle; protected slots are deferred and no auto-waste is generated (Stage 20.4).
 
 ## Important Operational Files
 
