@@ -61,6 +61,10 @@ router = Router()
 # a distributed lock or a DB-level reservation pattern.
 _STT_LOCK: asyncio.Lock = asyncio.Lock()
 
+# Stage 20.6: typed text remains rules-first only for known check-in replies;
+# everything else continues through the existing capture/Advisor gate.
+TYPED_FREE_TEXT_POLICY = "rules_first_then_existing_capture"
+
 
 def build_capture_confirmation_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
