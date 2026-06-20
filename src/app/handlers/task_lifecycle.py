@@ -236,7 +236,10 @@ async def done_cmd(message: Message, session: AsyncSession):
         return
 
     task_id = int(payload)
-    task = await TaskService(session).mark_done(task_id)
+    task = await TaskService(session).mark_done(
+        task_id,
+        user_id=message.from_user.id if message.from_user else None,
+    )
 
     if task is None:
         await message.answer(f"Задача #{task_id} не найдена.")
@@ -335,7 +338,10 @@ async def task_done_callback(callback: CallbackQuery, session: AsyncSession):
         return
 
     task_id = int(raw_task_id)
-    task = await TaskService(session).mark_done(task_id)
+    task = await TaskService(session).mark_done(
+        task_id,
+        user_id=callback.from_user.id,
+    )
     if task is None:
         await callback.answer("Задача не найдена", show_alert=True)
         return

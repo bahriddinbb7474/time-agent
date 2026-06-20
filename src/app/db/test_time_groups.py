@@ -3,6 +3,7 @@ from app.services.categories import (
     TIME_GROUP_CODES,
     TIME_GROUPS,
     normalize_time_group,
+    time_group_for_category,
 )
 
 
@@ -51,6 +52,10 @@ def test_legacy_categories_remain_compatible() -> None:
         "personal",
         "other",
     }
+    assert time_group_for_category("family") == "family_time"
+    assert time_group_for_category("work") == "work"
+    assert time_group_for_category("personal") == "personal"
+    assert time_group_for_category("unknown-category") == "no_data"
 
 
 if __name__ == "__main__":

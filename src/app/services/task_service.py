@@ -9,9 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import APP_TZ, now_tz
 from app.db import crud
-from app.db.models import Task
+from app.db.models import DailySchedule, Task, TimeBlock
+from app.services.categories import time_group_for_category
 from app.services.context_validator import ContextValidator
 from app.services.daily_context_service import DailyContextService
+from app.services.daily_control_service import (
+    ActivityEntryService,
+    DailyControlValidationError,
+)
 from app.services.crisis_stack_service import CrisisStackService
 from app.services.prayer_times_service import PrayerTimesService
 from app.services.routine_service import RoutineService
@@ -109,11 +114,60 @@ class TaskService:
     async def delete_task(self, task_id: int) -> bool:
         return await crud.delete_task(self.session, task_id)
 
-    async def mark_done(self, task_id: int) -> TaskDTO | None:
+    async def mark_done(
+        self, task_id: int, *, user_id: int | None = None
+    ) -> TaskDTO | None:
         task = await crud.mark_task_done(self.session, task_id)
         if task is None:
             return None
+        if user_id is not None:
+            await self._account_confirmed_time_block(task=task, user_id=user_id)
         return self._to_dto(task)
+
+    async def _account_confirmed_time_block(
+        self, *, task: Task, user_id: int
+    ) -> None:
+        result = await self.session.execute(
+            select(TimeBlock)
+            .join(DailySchedule, TimeBlock.schedule_id == DailySchedule.id)
+            .where(
+                DailySchedule.user_id == user_id,
+                DailySchedule.usage_date == now_tz().date(),
+                DailySchedule.status == "confirmed",
+                TimeBlock.user_id == user_id,
+                TimeBlock.source_type == "task",
+                TimeBlock.source_id == task.id,
+            )
+            .order_by(TimeBlock.start_at, TimeBlock.id)
+        )
+        block = result.scalars().first()
+        if block is None:
+            return
+
+        start_at = block.start_at
+        end_at = block.end_at
+        if start_at.tzinfo is None:
+            start_at = start_at.replace(tzinfo=APP_TZ)
+        if end_at.tzinfo is None:
+            end_at = end_at.replace(tzinfo=APP_TZ)
+
+        try:
+            await ActivityEntryService(self.session).create(
+                user_id=user_id,
+                start_at=start_at,
+                end_at=end_at,
+                title=block.title,
+                category=time_group_for_category(block.category),
+                source="planned_task",
+                confidence=1.0,
+                owner_confirmed=True,
+            )
+        except DailyControlValidationError:
+            log.warning(
+                "Planned task accounting skipped task_id=%s block_id=%s",
+                task.id,
+                block.id,
+            )
 
     async def list_done_for_date(self, target_date) -> list[TaskDTO]:
         tasks = await crud.list_done_tasks_for_date(self.session, target_date)

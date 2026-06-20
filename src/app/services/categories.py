@@ -59,3 +59,15 @@ TIME_GROUP_CODES = frozenset(group.code for group in TIME_GROUPS)
 def normalize_time_group(code: str | None) -> str:
     normalized = (code or "").strip().lower()
     return normalized if normalized in TIME_GROUP_CODES else "no_data"
+
+
+def time_group_for_category(category: str | None) -> str:
+    normalized = (category or "").strip().lower()
+    if normalized in TIME_GROUP_CODES:
+        return normalized
+    if normalized == "family":
+        return "family_time"
+    if normalized in KNOWN_CATEGORIES:
+        # Preserve legacy categories that have no honest one-to-one time-group match.
+        return normalized
+    return "no_data"
