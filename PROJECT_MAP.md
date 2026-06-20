@@ -16,7 +16,8 @@ Time-Agent is a Telegram bot for personal mental-load dispatching with context-a
 - Stage 20.3 Confirmation UX / schedule proposal review: DONE / production PASS / CLOSED.
 - Stage 20.4 Check-in Scheduler / periodic plan control: DONE / production PASS / CLOSED.
 - Stage 20.5 Rules-first ответы: DONE / production PASS / CLOSED; depends on Stage 20.4.
-- **Stage 20.6**: Свободный текст и голос — next.
+- Stage 20.6 Свободный текст и голос: DONE / production PASS / CLOSED.
+- **Stage 20.7**: `не помню`, неучтённое и `впустую` — next.
 - Stage 21: Task Lifecycle.
 - Stage 22: Production hardening + main DoD.
 - Stage 23: Idea Vault.
@@ -125,6 +126,7 @@ time-agent/
 - `ConfirmedScheduleReview`: durable owner confirmation/rebuild lifecycle on top of proposal drafts; no scheduler or morning briefing wiring yet (Stage 20.3).
 - `Checkin`: durable periodic plan-control records with pending/deferred/answered lifecycle; protected slots are deferred and no auto-waste is generated (Stage 20.4).
 - Stage 20.5 adds deterministic check-in response handling for buttons and text with shared safe outcomes: `aligned`, `started`, `defer`, `unknown`, `other_text`, `cancel`, and fallback. No OpenRouter/LLM, no auto-waste, and no private text in INFO logs.
+- Stage 20.6 keeps known typed replies rules-first, adds a voice/STT-to-LLM boundary for ambiguous voice input, fails closed when voice AI/runtime is OFF, requires owner confirmation before mutation, stores no raw transcript/prompt/raw LLM response, and keeps INFO logs free of private transcript/text.
 
 ## Important Operational Files
 

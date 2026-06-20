@@ -6,10 +6,10 @@
 
 ## Current Stage
 
-- Stage 20.5 Rules-first ответы: **CLOSED / PRODUCTION PASS**.
-- Repository production baseline: `1e88964` (Stage 20.5 complete).
-- Production HEAD (last deployed): `1e88964`.
-- Next: Stage 20.6 Свободный текст и голос.
+- Stage 20.6 Свободный текст и голос: **CLOSED / PRODUCTION PASS**.
+- Repository production baseline: `8973f80` (Stage 20.6 complete).
+- Production HEAD (last deployed): `8973f80`.
+- Next: Stage 20.7 `не помню`, неучтённое и `впустую`.
 
 ## Completed Stages
 
@@ -23,10 +23,11 @@
 - 20.3 + hotfixes: DONE / Confirmation UX and schedule review CLOSED. See `docs/CURRENT_STATE.md`.
 - 20.4: DONE / Check-in Scheduler and periodic plan control CLOSED. See `docs/CURRENT_STATE.md`.
 - 20.5: DONE / Rules-first responses CLOSED. See `docs/CURRENT_STATE.md`.
+- 20.6: DONE / Free text and voice CLOSED. See `docs/CURRENT_STATE.md`.
 
 ## Current Route
 
-- **Stage 20.6**: Свободный текст и голос — next.
+- **Stage 20.7**: `не помню`, неучтённое и `впустую` — next.
 - Stage 21: Task Lifecycle.
 - Stage 22: Production hardening + main DoD.
 - Stage 23: Idea Vault.

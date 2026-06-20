@@ -1,7 +1,57 @@
 # Current State — Time-Agent
 
-> Last updated: Stage 20.5 CLOSED (2026-06-20).
+> Last updated: Stage 20.6 CLOSED (2026-06-20).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
+
+## Stage 20.6 — Свободный текст и голос: CLOSED
+
+Stage 20.6 is complete and production-smoked.
+
+### What was built
+
+**Stage 20.6 — simplified free-text and voice path**
+- Architecture stays simplified: no large local NLP subsystem is introduced.
+- Known typed replies remain rules-first.
+- Ambiguous typed text does not create activity without confirmation.
+- Voice path adds an STT/voice AI boundary and an LLM interpretation path.
+- Voice runtime/provider OFF fails closed safely.
+- Any LLM proposal requires explicit owner confirmation before mutation.
+- No raw transcript, prompt, or raw LLM response is stored.
+- No private transcript or private text is written to INFO logs.
+- `не помню` creates no fake activity.
+- No auto-waste behavior is introduced.
+- Production baseline commits:
+  - `e004a79` — free-text boundary
+  - `a71a860` — STT boundary
+  - `7b7355e` — confirmed LLM proposal
+  - `8973f80` — smoke contract
+
+### Production smoke result
+
+- Production HEAD: `8973f80`
+- typed `Другое` + owner text writes owner-provided activity fact
+- activity fact stored with `source=checkin`
+- `owner_confirmed=1`
+- `waste_marked_by_owner=0`
+- voice while AI/LLM OFF returns a safe disabled message
+- no mutation before confirmation
+- unknown / no-memory creates no fake activity
+- no auto-waste
+- no OpenRouter / no LLM call during disabled smoke
+- logs clean: no traceback / error / exception / openrouter / transcript
+
+### Stage 20.6 boundaries
+
+- Known typed replies stay rules-first
+- Voice runtime/provider OFF fails closed safely
+- No OpenRouter calls during disabled smoke
+- Advisor runtime remains default OFF
+- No OpenRouter calls happen unless owner enables Advisor manually
+
+### Stage verdict
+
+- Stage 20.6: **CLOSED / PRODUCTION PASS**
+- Next stage: **Stage 20.7 — `не помню`, неучтённое и `впустую`**
 
 ## Stage 20.5 — Rules-first ответы: CLOSED
 
@@ -338,9 +388,9 @@ text message
 
 ---
 
-## Next: Stage 20.6 — Свободный текст и голос
+## Next: Stage 20.7 — `не помню`, неучтённое и `впустую`
 
-Stage 20.5 rules-first responses are closed. The next planned step is Stage 20.6.
+Stage 20.6 free text and voice is closed. The next planned step is Stage 20.7.
 
 ---
 
