@@ -1,10 +1,12 @@
 ﻿import asyncio
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 
 from app.config import load_config
+from app.core.time import APP_TZ
 from app.logging_setup import setup_logging
 from app.security import OwnerOnlyMiddleware
 
@@ -26,6 +28,7 @@ from app.db.seed import seed_if_empty
 from app.db.middleware import DbSessionMiddleware
 from app.scheduler.scheduler import build_scheduler, recover_alerts
 from app.scheduler.jobs import morning_briefing
+from app.services.checkin_scheduler_service import CheckinSchedulerService
 
 log = logging.getLogger("time-agent")
 
@@ -82,6 +85,12 @@ async def main() -> None:
                 session=session,
                 bot=bot,
             )
+            if cfg.allowed_telegram_id:
+                await CheckinSchedulerService(session).recover(
+                    scheduler=scheduler,
+                    user_id=cfg.allowed_telegram_id,
+                    today=datetime.now(APP_TZ).date(),
+                )
         log.info("Persistent alerts recovery completed")
     except Exception:
         log.exception("Alert recovery failed — startup continues without full recovery")
