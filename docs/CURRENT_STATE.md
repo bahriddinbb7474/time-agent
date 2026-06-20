@@ -1,7 +1,58 @@
 # Current State — Time-Agent
 
-> Last updated: Stage 20.4 CLOSED (2026-06-20).
+> Last updated: Stage 20.5 CLOSED (2026-06-20).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
+
+## Stage 20.5 — Rules-first ответы: CLOSED
+
+Stage 20.5 is complete and production-smoked.
+
+### What was built
+
+**Stage 20.5 — deterministic rules-first response path**
+- Rules-first response classifier added.
+- RU/UZ/EN deterministic intents added for check-in text answers.
+- Text replies are routed to active check-ins only when confidence is high.
+- Normal capture flow remains unchanged when there is no active check-in.
+- Button and text replies share one safe response path.
+- Supported outcomes: `aligned`, `started`, `defer`, `unknown`, `other_text`, `cancel`, and fallback.
+- `не помню` creates no fake activity.
+- `Другое` stores only the owner-provided fact, validated to 1-256 chars.
+- No auto-waste behavior is introduced.
+- No OpenRouter or LLM usage in this stage.
+- No private user text is written to INFO logs.
+- Production baseline commits:
+  - `6c04fbd` — classifier
+  - `52686e5` — application service
+  - `ae91021` — text routing
+  - `c5ee5dd` — safe other flow
+  - `1e88964` — smoke contract
+
+### Production smoke result
+
+- Production HEAD: `1e88964`
+- `/checkin_test` sends a real check-in message
+- text `всё по плану` -> `answered/aligned`
+- text `не помню` -> `answered/unknown`, no fake activity
+- text `начал` -> `answered/started`
+- text `позже` / defer -> `deferred`
+- `Другое` + owner text -> owner-provided activity fact
+- `activities=1` only for owner-provided `other_text`
+- no auto-waste
+- no OpenRouter / no LLM
+- logs clean: no traceback / error / exception
+
+### Stage 20.5 boundaries
+
+- No OpenRouter calls
+- No LLM usage
+- Advisor runtime remains default OFF
+- No OpenRouter calls happen unless owner enables Advisor manually
+
+### Stage verdict
+
+- Stage 20.5: **CLOSED / PRODUCTION PASS**
+- Next stage: **Stage 20.6 — Свободный текст и голос**
 
 ## Stage 20.4 — Check-in Scheduler / periodic plan control: CLOSED
 
@@ -287,9 +338,9 @@ text message
 
 ---
 
-## Next: Stage 20.5 — Rules-first ответы
+## Next: Stage 20.6 — Свободный текст и голос
 
-Stage 20.4 check-in scheduler is closed. The next planned step is Stage 20.5.
+Stage 20.5 rules-first responses are closed. The next planned step is Stage 20.6.
 
 ---
 
