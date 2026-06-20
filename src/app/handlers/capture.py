@@ -348,6 +348,10 @@ async def capture_text_message(
         return
 
     settings = settings or load_config()
+    from app.handlers.checkins import try_handle_checkin_text
+
+    if await try_handle_checkin_text(message, session, settings=settings):
+        return
     draft = CaptureRouterService().classify_text(message.text)
     if draft.kind == CAPTURE_KIND_IGNORE:
         return

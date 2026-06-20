@@ -11,9 +11,37 @@ from app.services.checkin_response_service import CheckinResponseService
 from app.services.daily_control_service import DailyControlNotFoundError
 from app.db.models import Checkin
 from app.services.checkin_scheduler_service import deliver_pending_checkin
+from app.services.checkin_context_service import CheckinContextService
+from app.services.checkin_response_classifier import CheckinResponseClassifier
 
 
 router = Router()
+
+
+async def try_handle_checkin_text(message, session: AsyncSession, settings=None) -> bool:
+    settings = settings or load_config()
+    user_id = getattr(getattr(message, "from_user", None), "id", None)
+    if settings.allowed_telegram_id is None or user_id != settings.allowed_telegram_id:
+        return False
+    row = await CheckinContextService(session).get_active(user_id=user_id)
+    if row is None:
+        return False
+    text = getattr(message, "text", None)
+    intent = CheckinResponseClassifier().classify(text).intent
+    if intent not in {"aligned", "started", "defer", "unknown", "cancel"}:
+        return False
+    updated = await CheckinResponseService(session).respond_value(
+        checkin_id=row.id, user_id=user_id, value=text or ""
+    )
+    labels = {
+        "aligned": "Отмечено: всё по плану.",
+        "started": "Отмечено: начал.",
+        "deferred": "Check-in отложен.",
+        "unknown": "Записано: нет данных.",
+        "cancel": "Check-in отменён.",
+    }
+    await message.answer(labels.get(updated.response_mode, "Ответ учтён."))
+    return True
 
 
 @router.message(Command("checkin_test"))
