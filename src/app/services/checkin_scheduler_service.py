@@ -9,9 +9,34 @@ from app.core.time import APP_TZ
 from app.services.checkin_policy_service import CheckinPolicyService
 
 
-async def run_checkin_job(checkin_id: int) -> None:
-    """Stage 20.4-B contract; Telegram delivery is connected in 20.4-C."""
-    del checkin_id
+async def run_checkin_job(checkin_id: int, bot, user_id: int) -> None:
+    from sqlalchemy import select
+    from app.db.database import get_sessionmaker
+    from app.db.models import Checkin, TimeBlock
+    from app.keyboards.checkins import build_checkin_keyboard
+
+    async with get_sessionmaker()() as session:
+        row = await session.get(Checkin, checkin_id)
+        if row is None or row.user_id != user_id or row.status != "pending":
+            return
+        block_result = await session.execute(
+            select(TimeBlock).where(
+                TimeBlock.schedule_id == row.schedule_id,
+                TimeBlock.start_at < row.window_end,
+                TimeBlock.end_at > row.window_start,
+                TimeBlock.status != "cancelled",
+            ).order_by(TimeBlock.start_at, TimeBlock.id)
+        )
+        block = block_result.scalars().first()
+        title = block.title if block is not None else "свободный интервал"
+        await bot.send_message(
+            user_id,
+            f"Сейчас по плану: {title}",
+            reply_markup=build_checkin_keyboard(row.id),
+        )
+        row.status = "sent"
+        row.updated_at = datetime.now(APP_TZ)
+        await session.commit()
 
 
 class CheckinSchedulerService:
@@ -26,6 +51,7 @@ class CheckinSchedulerService:
         today: date,
         interval_minutes: int = 60,
         now: datetime | None = None,
+        bot=None,
     ) -> list[int]:
         current = now or datetime.now(APP_TZ)
         planned_ids: list[int] = []
@@ -43,7 +69,7 @@ class CheckinSchedulerService:
                     run_checkin_job,
                     trigger=DateTrigger(run_date=run_at, timezone=APP_TZ),
                     id=f"checkin_{row.id}",
-                    kwargs={"checkin_id": row.id},
+                    kwargs={"checkin_id": row.id, "bot": bot, "user_id": user_id},
                     replace_existing=True,
                     coalesce=True,
                     misfire_grace_time=300,
@@ -56,4 +82,3 @@ class CheckinSchedulerService:
         if value.tzinfo is None or value.utcoffset() is None:
             return value.replace(tzinfo=APP_TZ)
         return value.astimezone(APP_TZ)
-
