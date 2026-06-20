@@ -21,7 +21,12 @@ from app.services.capture_router_service import CaptureDraft
 
 log = logging.getLogger("time-agent.advisor.capture")
 
-_ADVISOR_INTENTS = frozenset({"help", "settings", "unknown"})
+_ADVISOR_INTENTS = frozenset({"help", "settings", "unknown", "checkin_fact"})
+_EXPLICIT_WASTE_PATTERN = re.compile(
+    r"(?:\bвпустую\b|\bпотер(?:ял|яла)\s+время\b|"
+    r"\bwast(?:e|ed)\s+time\b|\bbekorga\b)",
+    re.IGNORECASE,
+)
 
 _SETTINGS_GOAL_PATTERN = re.compile(
     r"\b(?:добавь|добавить|установи|измени|поменяй|настрой)\s+цель\s+"
@@ -54,8 +59,16 @@ def advisor_needed(draft: CaptureDraft) -> bool:
     return draft.advisor_intent in _ADVISOR_INTENTS or draft.needs_clarification
 
 
-def build_safe_advisor_proposal_json(proposal: AdvisorProposal) -> str:
+def build_safe_advisor_proposal_json(
+    proposal: AdvisorProposal,
+    *,
+    checkin_id: int | None = None,
+    waste_explicit: bool = False,
+) -> str:
     safe = {k: getattr(proposal, k) for k in _SAFE_PROPOSAL_KEYS}
+    if checkin_id is not None:
+        safe["checkin_id"] = checkin_id
+        safe["waste_explicit"] = waste_explicit
     return json.dumps(safe, ensure_ascii=False)
 
 
@@ -137,6 +150,53 @@ async def _enforce_settings_intent(
     )
 
 
+async def _enforce_checkin_fact_intent(
+    draft: CaptureDraft,
+    result: AdvisorOrchestrationResult,
+    *,
+    now_dt: datetime | None,
+) -> AdvisorOrchestrationResult:
+    if draft.advisor_intent != "checkin_fact" or result.validation_result is None:
+        return result
+
+    current = result.validation_result.safe_proposal
+    valid_activity = current.proposal_type == "activity"
+    valid_waste = current.category != "waste" or bool(
+        _EXPLICIT_WASTE_PATTERN.search(draft.text)
+    )
+    if valid_activity and valid_waste and result.validation_result.valid:
+        return result
+
+    safe = AdvisorProposal(
+        intent="checkin_fact",
+        proposal_type="clarification",
+        title=None,
+        description=None,
+        category=None,
+        when_text=None,
+        target_name=None,
+        target_value=None,
+        target_unit=None,
+        needs_confirmation=False,
+        needs_clarification=True,
+        user_message="Не удалось безопасно разобрать факт. Уточните, что происходило.",
+        model=current.model,
+        input_tokens=current.input_tokens,
+        output_tokens=current.output_tokens,
+        estimated_cost_usd=current.estimated_cost_usd,
+        error=False,
+    )
+    validation = await validate_advisor_proposal(safe, now_dt=now_dt)
+    return AdvisorOrchestrationResult(
+        used_advisor=result.used_advisor,
+        blocked_by_limit=result.blocked_by_limit,
+        provider_error=result.provider_error,
+        validation_result=validation,
+        user_message=validation.user_message,
+        reason_code="checkin_fact_guard",
+    )
+
+
 async def run_advisor_for_draft(
     draft: CaptureDraft,
     *,
@@ -164,4 +224,5 @@ async def run_advisor_for_draft(
     )
 
     result = await orchestrator.run(request, now_dt=now_dt)
-    return await _enforce_settings_intent(draft, result, now_dt=now_dt)
+    result = await _enforce_settings_intent(draft, result, now_dt=now_dt)
+    return await _enforce_checkin_fact_intent(draft, result, now_dt=now_dt)

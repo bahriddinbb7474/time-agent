@@ -2,16 +2,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import select
 
 from app.db.models import ActivityEntry, CaptureDraftRecord
+from app.core.time import now_tz
 from app.db.test_capture_drafts import FakeVoiceMessage, RecordingSTTProvider, _setup_session
 from app.handlers.capture import capture_voice_message
 from app.services.advisor_presentation_service import AdvisorPresentationResult
 from app.services.ai_advisor_provider import AdvisorProposal
+from app.services.daily_control_service import CheckinService
 
 
 async def test_voice_uses_one_llm_call_and_only_shows_proposal() -> None:
@@ -19,6 +23,14 @@ async def test_voice_uses_one_llm_call_and_only_shows_proposal() -> None:
     try:
         async with Session() as session:
             message = FakeVoiceMessage()
+            now = now_tz()
+            checkin = await CheckinService(session).create(
+                user_id=message.from_user.id,
+                window_start=now - timedelta(hours=1),
+                window_end=now,
+                prompted_at=now - timedelta(minutes=5),
+                status="sent",
+            )
             settings = SimpleNamespace(
                 stt_max_duration_sec=60,
                 stt_max_file_mb=10,
@@ -28,7 +40,7 @@ async def test_voice_uses_one_llm_call_and_only_shows_proposal() -> None:
                 llm_daily_cost_usd_limit=0.0,
             )
             proposal = AdvisorProposal(
-                intent="capture",
+                intent="checkin_fact",
                 proposal_type="activity",
                 title="Работал над отчётом",
                 description=None,
@@ -78,6 +90,10 @@ async def test_voice_uses_one_llm_call_and_only_shows_proposal() -> None:
             assert len(drafts) == 1
             assert drafts[0].advisor_proposal_json is not None
             assert drafts[0].status == "pending"
+            assert drafts[0].raw_text == "[private advisor input]"
+            assert drafts[0].transcript is None
+            metadata = json.loads(drafts[0].advisor_proposal_json)
+            assert metadata["checkin_id"] == checkin.id
             activities = list((await session.execute(select(ActivityEntry))).scalars())
             assert activities == [], "proposal must not create activity before confirmation"
             assert message.answers[0][1] is not None

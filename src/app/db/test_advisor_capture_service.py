@@ -683,7 +683,7 @@ async def test_advisor_callback_confirm_activity_creates_only_after_confirmation
                 user_id=USER_ID,
                 draft=draft,
                 source="voice",
-                transcript=draft.text,
+                transcript=None,
                 advisor_proposal_json=_advisor_json(
                     proposal_type="activity", title="Работал над отчётом",
                 ),

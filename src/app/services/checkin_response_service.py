@@ -11,6 +11,7 @@ from app.services.daily_control_service import (
     DailyControlValidationError,
 )
 from app.services.checkin_response_classifier import CheckinResponseClassifier
+from app.services.categories import normalize_activity_time_group
 
 
 class CheckinResponseService:
@@ -51,57 +52,34 @@ class CheckinResponseService:
             checkin_id=checkin_id, user_id=user_id, status=status, response_mode=mode
         )
 
-    async def record_other_text(
-        self, *, checkin_id: int, user_id: int, text: str
-    ) -> Checkin:
-        value = " ".join((text or "").split())
-        if not value or len(value) > 256:
-            raise DailyControlValidationError(
-                "other check-in text must contain 1 to 256 characters"
-            )
-        result = await self.session.execute(
-            select(Checkin).where(Checkin.id == checkin_id, Checkin.user_id == user_id)
-        )
-        checkin = result.scalar_one_or_none()
-        if checkin is None:
-            raise DailyControlNotFoundError(f"Checkin id={checkin_id} not found")
-        if checkin.status == "answered" and checkin.response_mode == "other_text":
-            return checkin
-        if checkin.status != "open" or checkin.response_mode != "other":
-            raise DailyControlValidationError("check-in is not waiting for other text")
-        await ActivityEntryService(self.session).create(
-            user_id=user_id,
-            start_at=checkin.window_start.replace(tzinfo=now_tz().tzinfo),
-            end_at=checkin.window_end.replace(tzinfo=now_tz().tzinfo),
-            title=value,
-            category="other",
-            source="checkin",
-            owner_confirmed=True,
-            waste_marked_by_owner=False,
-        )
-        checkin.status = "answered"
-        checkin.response_mode = "other_text"
-        checkin.answered_at = now_tz()
-        checkin.updated_at = checkin.answered_at
-        await self.session.commit()
-        await self.session.refresh(checkin)
-        return checkin
-
     async def record_confirmed_activity(
-        self, *, checkin_id: int, user_id: int, title: str, category: str = "other"
+        self,
+        *,
+        checkin_id: int,
+        user_id: int,
+        title: str,
+        category: str,
+        source: str = "voice_llm",
+        response_mode: str = "voice_activity",
+        waste_explicit: bool = False,
     ) -> Checkin:
         value = " ".join((title or "").split())
+        category = normalize_activity_time_group(category)
         if not value or len(value) > 256:
             raise DailyControlValidationError(
                 "confirmed activity must contain 1 to 256 characters"
             )
+        if category == "waste" and not waste_explicit:
+            raise DailyControlValidationError(
+                "waste requires explicit owner statement and confirmation"
+            )
         result = await self.session.execute(
             select(Checkin).where(Checkin.id == checkin_id, Checkin.user_id == user_id)
         )
         checkin = result.scalar_one_or_none()
         if checkin is None:
             raise DailyControlNotFoundError(f"Checkin id={checkin_id} not found")
-        if checkin.status == "answered" and checkin.response_mode == "voice_activity":
+        if checkin.status == "answered" and checkin.response_mode == response_mode:
             return checkin
         if checkin.status not in {"sent", "open"}:
             raise DailyControlValidationError("check-in cannot accept activity")
@@ -111,12 +89,12 @@ class CheckinResponseService:
             end_at=checkin.window_end.replace(tzinfo=now_tz().tzinfo),
             title=value,
             category=category,
-            source="voice_llm",
+            source=source,
             owner_confirmed=True,
-            waste_marked_by_owner=False,
+            waste_marked_by_owner=category == "waste" and waste_explicit,
         )
         checkin.status = "answered"
-        checkin.response_mode = "voice_activity"
+        checkin.response_mode = response_mode
         checkin.answered_at = now_tz()
         checkin.updated_at = checkin.answered_at
         await self.session.commit()

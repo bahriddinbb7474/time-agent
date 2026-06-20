@@ -23,7 +23,7 @@ from typing import Any
 from app.core.time import APP_TZ, now_tz
 from app.handlers.add import parse_add_payload
 from app.services.ai_advisor_provider import AdvisorProposal
-from app.services.categories import KNOWN_CATEGORIES
+from app.services.categories import KNOWN_CATEGORIES, normalize_activity_time_group
 from app.services.validation_result import ValidationStatus
 
 log = logging.getLogger("time-agent.advisor.validator")
@@ -218,7 +218,11 @@ async def _validate_task_like(
             user_message="Уточните название задачи.",
         )
 
-    normalized_category = _normalize_category(proposal.category)
+    normalized_category = (
+        normalize_activity_time_group(proposal.category)
+        if proposal.proposal_type == "activity"
+        else _normalize_category(proposal.category)
+    )
     normalized_when = _parse_when_text(proposal.when_text)
 
     # Past time

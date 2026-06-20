@@ -63,7 +63,7 @@ class CaptureDraft:
     confidence: float = 1.0
     reason_code: str = "rules"
     needs_clarification: bool = False
-    # advisor_intent: "capture" | "help" | "settings" | "unknown"
+    # advisor_intent: capture/help/settings/unknown/checkin_fact
     advisor_intent: str = "capture"
 
 

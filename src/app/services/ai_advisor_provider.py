@@ -16,7 +16,9 @@ _DEFAULT_ADVISOR_MODEL = "openai/gpt-4o-mini"
 _TIMEOUT_SEC = 15.0
 _MAX_RESPONSE_CHARS = 2000
 
-_VALID_INTENTS = frozenset({"capture", "help", "settings", "unknown"})
+_VALID_INTENTS = frozenset(
+    {"capture", "help", "settings", "unknown", "checkin_fact"}
+)
 _VALID_PROPOSAL_TYPES = frozenset({
     "task", "later", "boss", "activity", "help_text",
     "settings_change", "clarification", "none",
@@ -188,11 +190,11 @@ You are a personal assistant for a Telegram task-capture bot owned by a single u
 
 === JSON RESPONSE CONTRACT ===
 {
-  "intent": "capture" | "help" | "settings" | "unknown",
+  "intent": "capture" | "help" | "settings" | "unknown" | "checkin_fact",
   "proposal_type": "task" | "later" | "boss" | "activity" | "help_text" | "settings_change" | "clarification" | "none",
   "title": null or string (max 100 chars),
   "description": null or string (max 200 chars),
-  "category": null or "work" | "family" | "health" | "prayer" | "personal" | "other",
+  "category": null or "work" | "family" | "health" | "prayer" | "personal" | "other" | "sleep" | "quran" | "hadith_religious" | "dhikr" | "food" | "hygiene" | "study" | "ai_projects" | "sport" | "youtube_news" | "road" | "children_study" | "family_time" | "relationships" | "entertainment" | "no_data" | "waste",
   "when_text": null or Russian time expression,
   "target_name": null or string (max 50 chars),
   "target_value": null or string (max 20 chars),
@@ -206,7 +208,9 @@ You are a personal assistant for a Telegram task-capture bot owned by a single u
 - capture: user wants to add a task, reminder, or note
 - help: user asks how to use the bot or what commands exist
 - settings: user wants to change goals or bot configuration
-- unknown: input is too ambiguous — set needs_clarification=true\
+- unknown: input is too ambiguous — set needs_clarification=true
+- checkin_fact: interpret what already happened; return proposal_type=activity and one
+  time-group category. Use waste only when the owner explicitly says the time was wasted.\
 """
 
 

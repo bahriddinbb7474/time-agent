@@ -61,6 +61,13 @@ def normalize_time_group(code: str | None) -> str:
     return normalized if normalized in TIME_GROUP_CODES else "no_data"
 
 
+def normalize_activity_time_group(code: str | None) -> str:
+    normalized = (code or "").strip().lower()
+    if normalized == "family":
+        return "family_time"
+    return normalize_time_group(normalized)
+
+
 def time_group_for_category(category: str | None) -> str:
     normalized = (category or "").strip().lower()
     if normalized in TIME_GROUP_CODES:

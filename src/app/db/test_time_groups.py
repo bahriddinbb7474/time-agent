@@ -2,6 +2,7 @@ from app.services.categories import (
     KNOWN_CATEGORIES,
     TIME_GROUP_CODES,
     TIME_GROUPS,
+    normalize_activity_time_group,
     normalize_time_group,
     time_group_for_category,
 )
@@ -41,6 +42,8 @@ def test_time_group_normalization_is_safe() -> None:
     assert normalize_time_group(" Prayer ") == "prayer"
     assert normalize_time_group("unknown-group") == "no_data"
     assert normalize_time_group(None) == "no_data"
+    assert normalize_activity_time_group("family") == "family_time"
+    assert normalize_activity_time_group("personal") == "no_data"
 
 
 def test_legacy_categories_remain_compatible() -> None:

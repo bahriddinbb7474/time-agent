@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from dataclasses import replace
 from pathlib import Path
 
 from aiogram import F, Router
@@ -33,6 +35,8 @@ from app.services.capture_draft_service import (
 )
 from app.services.capture_router_service import (
     CAPTURE_KIND_IGNORE,
+    CAPTURE_KIND_LATER,
+    CaptureDraft,
     CaptureRouterService,
 )
 from app.services.advisor_capture_service import (
@@ -46,6 +50,11 @@ from app.services.api_limit_service import ApiLimitService
 from app.services.api_usage_service import ApiUsageService
 from app.services.checkin_context_service import CheckinContextService
 from app.services.checkin_response_service import CheckinResponseService
+from app.services.categories import normalize_activity_time_group
+from app.services.daily_control_service import (
+    DailyControlNotFoundError,
+    DailyControlValidationError,
+)
 from app.services.stt_provider import DisabledSTTProvider, OpenRouterSTTProvider, get_stt_provider
 from app.services.voice_capture_safety import (
     downloaded_voice_temp_path,
@@ -122,6 +131,9 @@ async def _try_advisor_response(
     source: str = "text",
     transcript: str | None = None,
     force: bool = False,
+    checkin_id: int | None = None,
+    waste_explicit: bool = False,
+    store_private_input: bool = True,
 ) -> bool:
     """Try to show an advisor response. Returns True if handled, False to fall through."""
     if not force and not advisor_needed(draft):
@@ -157,14 +169,25 @@ async def _try_advisor_response(
         if orch_result.validation_result is not None:
             proposal_json = build_safe_advisor_proposal_json(
                 orch_result.validation_result.safe_proposal,
+                checkin_id=checkin_id,
+                waste_explicit=waste_explicit,
             )
 
+        stored_draft = draft
+        stored_transcript = transcript
+        if not store_private_input:
+            stored_draft = replace(
+                draft,
+                text="[private advisor input]",
+                title=None,
+            )
+            stored_transcript = None
         await draft_service.create_pending_draft(
             chat_id=message.chat.id,
             user_id=message.from_user.id,
-            draft=draft,
+            draft=stored_draft,
             source=source,
-            transcript=transcript,
+            transcript=stored_transcript,
             advisor_proposal_json=proposal_json,
         )
         await message.answer(
@@ -174,6 +197,82 @@ async def _try_advisor_response(
         return True
 
     await message.answer(presentation.text)
+    return True
+
+
+def _owner_explicitly_said_waste(text: str) -> bool:
+    normalized = " ".join(text.lower().split())
+    return bool(
+        re.search(
+            r"(?:\bвпустую\b|\bпотер(?:ял|яла)\s+время\b|"
+            r"\bwast(?:e|ed)\s+time\b|\bbekorga\b)",
+            normalized,
+        )
+    )
+
+
+async def _try_checkin_fact_proposal(
+    message: Message,
+    session: AsyncSession,
+    settings,
+    *,
+    text: str,
+    source: str,
+) -> bool:
+    if message.chat is None or message.from_user is None:
+        return False
+    checkin = await CheckinContextService(session).get_active(
+        user_id=message.from_user.id,
+    )
+    if checkin is None:
+        return False
+
+    value = " ".join((text or "").split())
+    if not value or len(value) > 2000:
+        await message.answer(
+            "Не удалось безопасно разобрать ответ. Сократите его и попробуйте снова."
+        )
+        return True
+
+    draft = CaptureDraft(
+        kind=CAPTURE_KIND_LATER,
+        text=value,
+        title=value,
+        confidence=1.0,
+        reason_code="checkin_fact",
+        advisor_intent="checkin_fact",
+    )
+    draft_service = CaptureDraftService(session)
+    await draft_service.expire_old_pending_drafts(
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    pending_record = await draft_service.get_latest_pending_draft(
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    if pending_record is not None:
+        await message.answer(
+            "Уже есть предложение AI. Используйте кнопки под предыдущим сообщением."
+        )
+        return True
+
+    handled = await _try_advisor_response(
+        message,
+        session,
+        draft,
+        draft_service,
+        settings,
+        source=source,
+        force=True,
+        checkin_id=checkin.id,
+        waste_explicit=_owner_explicitly_said_waste(value),
+        store_private_input=False,
+    )
+    if not handled:
+        await message.answer(
+            "AI-разбор ответа на check-in выключен или недоступен. Ничего не сохранено."
+        )
     return True
 
 
@@ -298,6 +397,15 @@ async def capture_voice_message(
         await message.answer(result.user_message)
         return
 
+    if await _try_checkin_fact_proposal(
+        message,
+        session,
+        settings,
+        text=transcript,
+        source=CAPTURE_DRAFT_SOURCE_VOICE,
+    ):
+        return
+
     draft = CaptureRouterService().classify_text(transcript)
     if draft.kind == CAPTURE_KIND_IGNORE:
         await message.answer(result.user_message)
@@ -338,6 +446,7 @@ async def capture_voice_message(
         source=CAPTURE_DRAFT_SOURCE_VOICE,
         transcript=transcript,
         force=True,
+        store_private_input=False,
     )
     if handled:
         return
@@ -357,6 +466,14 @@ async def capture_text_message(
     from app.handlers.checkins import try_handle_checkin_text
 
     if await try_handle_checkin_text(message, session, settings=settings):
+        return
+    if await _try_checkin_fact_proposal(
+        message,
+        session,
+        settings,
+        text=message.text,
+        source="text",
+    ):
         return
     draft = CaptureRouterService().classify_text(message.text)
     if draft.kind == CAPTURE_KIND_IGNORE:
@@ -643,10 +760,16 @@ async def advisor_capture_callback(
         return
 
     if action == "confirm_activity":
-        checkin = await CheckinContextService(session).get_active(
-            user_id=callback.from_user.id,
-        )
-        if checkin is None:
+        raw_checkin_id = proposal.get("checkin_id")
+        checkin_id = None
+        if isinstance(raw_checkin_id, int) and raw_checkin_id > 0:
+            checkin_id = raw_checkin_id
+        if checkin_id is None:
+            checkin = await CheckinContextService(session).get_active(
+                user_id=callback.from_user.id,
+            )
+            checkin_id = checkin.id if checkin is not None else None
+        if checkin_id is None:
             await draft_service.mark_cancelled(pending_record)
             await _finalize_capture_ui(callback)
             await callback.message.answer(
@@ -655,13 +778,35 @@ async def advisor_capture_callback(
             await callback.answer()
             return
         title = proposal.get("title") or pending_record.raw_text
-        category = proposal.get("category") or "other"
-        await CheckinResponseService(session).record_confirmed_activity(
-            checkin_id=checkin.id,
-            user_id=callback.from_user.id,
-            title=title,
-            category=category,
-        )
+        category = normalize_activity_time_group(proposal.get("category"))
+        waste_explicit = proposal.get("waste_explicit") is True
+        if category == "waste" and not waste_explicit:
+            await draft_service.mark_cancelled(pending_record)
+            await _finalize_capture_ui(callback)
+            await callback.message.answer(
+                "Категория «Впустую» требует явного ответа владельца. Ничего не сохранено."
+            )
+            await callback.answer()
+            return
+        is_voice = pending_record.source == CAPTURE_DRAFT_SOURCE_VOICE
+        try:
+            await CheckinResponseService(session).record_confirmed_activity(
+                checkin_id=checkin_id,
+                user_id=callback.from_user.id,
+                title=title,
+                category=category,
+                source="voice_llm" if is_voice else "checkin_llm",
+                response_mode="voice_activity" if is_voice else "fact_activity",
+                waste_explicit=waste_explicit,
+            )
+        except (DailyControlNotFoundError, DailyControlValidationError):
+            await draft_service.mark_cancelled(pending_record)
+            await _finalize_capture_ui(callback)
+            await callback.message.answer(
+                "Check-in уже закрыт или факт конфликтует с учтённым временем. Ничего не сохранено."
+            )
+            await callback.answer()
+            return
         await draft_service.mark_confirmed(pending_record)
         await _finalize_capture_ui(callback)
         await callback.message.answer("Активность подтверждена.")
