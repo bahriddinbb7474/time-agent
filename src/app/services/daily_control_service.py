@@ -13,7 +13,9 @@ SCHEDULE_STATUSES = frozenset(
     {"draft", "confirmed", "declined", "expired", "cancelled", "archived"}
 )
 TIME_BLOCK_STATUSES = frozenset({"planned", "completed", "cancelled"})
-CHECKIN_STATUSES = frozenset({"pending", "open", "answered", "deferred", "expired"})
+CHECKIN_STATUSES = frozenset(
+    {"pending", "sent", "open", "answered", "deferred", "skipped", "expired"}
+)
 
 
 class DailyControlError(Exception):
@@ -432,6 +434,10 @@ class CheckinService:
         window_end: datetime,
         prompted_at: datetime,
         status: str = "pending",
+        schedule_id: int | None = None,
+        schedule_version: int | None = None,
+        usage_date: date | None = None,
+        response_mode: str | None = None,
     ) -> Checkin:
         start, end = _valid_interval(window_start, window_end)
         prompted = _aware_local(prompted_at, "prompted_at")
@@ -444,12 +450,15 @@ class CheckinService:
         now = now_tz()
         checkin = Checkin(
             user_id=user_id,
+            schedule_id=schedule_id,
+            schedule_version=schedule_version,
+            usage_date=usage_date,
             window_start=start,
             window_end=end,
             prompted_at=prompted,
             answered_at=None,
             status=status,
-            response_mode=None,
+            response_mode=response_mode,
             created_at=now,
             updated_at=now,
         )

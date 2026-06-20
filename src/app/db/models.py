@@ -658,11 +658,16 @@ class Checkin(Base):
         ),
         Index("ix_checkins_user_window", "user_id", "window_start"),
         Index("ix_checkins_user_status", "user_id", "status"),
+        Index("ix_checkins_schedule_version", "schedule_id", "schedule_version"),
+        Index("ix_checkins_user_date", "user_id", "usage_date"),
         CheckConstraint("window_end > window_start", name="ck_checkins_valid_window"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    schedule_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    schedule_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    usage_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     prompted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
