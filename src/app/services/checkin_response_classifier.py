@@ -19,7 +19,9 @@ class CheckinResponseClassifier:
         "started": {"started", "начал", "начала", "приступил", "boshladim"},
         "defer": {"defer", "позже", "отложить", "отложи", "keyin"},
         "unknown": {
-            "unknown", "не помню", "не знаю", "bilmiman", "eslolmayman", "forgot",
+            "unknown", "не помню", "не знаю", "не помню что делал", "не знаю что делал",
+            "bilmiman", "eslolmayman", "nima qilganimni eslolmayman",
+            "forgot", "i don't remember", "i do not remember",
         },
         "cancel": {"cancel", "отмена", "отменить", "bekor"},
         "other_text": {"other", "другое", "другой ответ", "boshqa"},
@@ -39,4 +41,3 @@ class CheckinResponseClassifier:
         text = (value or "").strip().lower().replace("’", "'")
         text = re.sub(r"[.!?,;:]+$", "", text)
         return " ".join(text.split())
-

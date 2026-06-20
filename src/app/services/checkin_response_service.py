@@ -18,6 +18,8 @@ class CheckinResponseService:
         "aligned": ("answered", "aligned"),
         "started": ("answered", "started"),
         "defer": ("deferred", "deferred"),
+        # Owner explicitly reported no recollection. This is check-in state only:
+        # it must not create an ActivityEntry or imply waste.
         "unknown": ("answered", "unknown"),
         "other": ("open", "other"),
     }
