@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import now_tz
 from app.db.models import Checkin
-from app.services.daily_control_service import DailyControlNotFoundError
+from app.services.daily_control_service import (
+    ActivityEntryService,
+    DailyControlNotFoundError,
+    DailyControlValidationError,
+)
 from app.services.checkin_response_classifier import CheckinResponseClassifier
 
 
@@ -44,6 +48,42 @@ class CheckinResponseService:
         return await self._apply(
             checkin_id=checkin_id, user_id=user_id, status=status, response_mode=mode
         )
+
+    async def record_other_text(
+        self, *, checkin_id: int, user_id: int, text: str
+    ) -> Checkin:
+        value = " ".join((text or "").split())
+        if not value or len(value) > 256:
+            raise DailyControlValidationError(
+                "other check-in text must contain 1 to 256 characters"
+            )
+        result = await self.session.execute(
+            select(Checkin).where(Checkin.id == checkin_id, Checkin.user_id == user_id)
+        )
+        checkin = result.scalar_one_or_none()
+        if checkin is None:
+            raise DailyControlNotFoundError(f"Checkin id={checkin_id} not found")
+        if checkin.status == "answered" and checkin.response_mode == "other_text":
+            return checkin
+        if checkin.status != "open" or checkin.response_mode != "other":
+            raise DailyControlValidationError("check-in is not waiting for other text")
+        await ActivityEntryService(self.session).create(
+            user_id=user_id,
+            start_at=checkin.window_start.replace(tzinfo=now_tz().tzinfo),
+            end_at=checkin.window_end.replace(tzinfo=now_tz().tzinfo),
+            title=value,
+            category="other",
+            source="checkin",
+            owner_confirmed=True,
+            waste_marked_by_owner=False,
+        )
+        checkin.status = "answered"
+        checkin.response_mode = "other_text"
+        checkin.answered_at = now_tz()
+        checkin.updated_at = checkin.answered_at
+        await self.session.commit()
+        await self.session.refresh(checkin)
+        return checkin
 
     async def _apply(
         self, *, checkin_id: int, user_id: int, status: str, response_mode: str

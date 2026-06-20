@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import load_config
 from app.services.checkin_response_service import CheckinResponseService
 from app.services.daily_control_service import DailyControlNotFoundError
+from app.services.daily_control_service import DailyControlValidationError
 from app.db.models import Checkin
 from app.services.checkin_scheduler_service import deliver_pending_checkin
 from app.services.checkin_context_service import CheckinContextService
@@ -28,6 +29,18 @@ async def try_handle_checkin_text(message, session: AsyncSession, settings=None)
         return False
     text = getattr(message, "text", None)
     intent = CheckinResponseClassifier().classify(text).intent
+    if intent == "other_text" and row.status == "open" and row.response_mode == "other":
+        try:
+            await CheckinResponseService(session).record_other_text(
+                checkin_id=row.id, user_id=user_id, text=text or ""
+            )
+        except DailyControlValidationError:
+            await message.answer(
+                "Не удалось сохранить факт. Напиши от 1 до 256 символов без пересечения с уже учтённым временем."
+            )
+            return True
+        await message.answer("Факт записан со слов владельца.")
+        return True
     if intent not in {"aligned", "started", "defer", "unknown", "cancel"}:
         return False
     updated = await CheckinResponseService(session).respond_value(
@@ -92,6 +105,6 @@ async def checkin_callback(callback: CallbackQuery, session: AsyncSession, setti
         "started": "Отмечено: начал.",
         "deferred": "Check-in отложен.",
         "unknown": "Записано: нет данных.",
-        "other": "Свободный ответ будет подключён следующим шагом.",
+        "other": "Напиши следующим сообщением, что происходило фактически.",
     }
     await callback.answer(labels.get(row.response_mode, "Ответ уже учтён."))
