@@ -47,6 +47,7 @@ def test_checkin_surface_is_rules_only_and_complete() -> None:
     source = inspect.getsource(handlers) + inspect.getsource(scheduler_service)
     assert "advisor_runtime" not in source
     assert "openrouter" not in source.lower()
+    assert "checkin_test" in source
 
 
 def main() -> None:

@@ -9,34 +9,46 @@ from app.core.time import APP_TZ
 from app.services.checkin_policy_service import CheckinPolicyService
 
 
-async def run_checkin_job(checkin_id: int, bot, user_id: int) -> None:
+async def deliver_pending_checkin(session, *, checkin_id: int, bot, user_id: int) -> bool:
     from sqlalchemy import select
-    from app.db.database import get_sessionmaker
     from app.db.models import Checkin, TimeBlock
     from app.keyboards.checkins import build_checkin_keyboard
 
+    row = await session.get(Checkin, checkin_id)
+    if row is None or row.user_id != user_id or row.status != "pending":
+        return False
+    block_result = await session.execute(
+        select(TimeBlock).where(
+            TimeBlock.schedule_id == row.schedule_id,
+            TimeBlock.start_at < row.window_end,
+            TimeBlock.end_at > row.window_start,
+            TimeBlock.status != "cancelled",
+        ).order_by(TimeBlock.start_at, TimeBlock.id)
+    )
+    block = block_result.scalars().first()
+    title = block.title if block is not None else "свободный интервал"
+    await bot.send_message(
+        user_id,
+        f"Сейчас по плану: {title}",
+        reply_markup=build_checkin_keyboard(row.id),
+    )
+    row.status = "sent"
+    row.prompted_at = datetime.now(APP_TZ)
+    row.updated_at = row.prompted_at
+    await session.commit()
+    return True
+
+
+async def run_checkin_job(checkin_id: int, bot, user_id: int) -> None:
+    from app.db.database import get_sessionmaker
+
     async with get_sessionmaker()() as session:
-        row = await session.get(Checkin, checkin_id)
-        if row is None or row.user_id != user_id or row.status != "pending":
-            return
-        block_result = await session.execute(
-            select(TimeBlock).where(
-                TimeBlock.schedule_id == row.schedule_id,
-                TimeBlock.start_at < row.window_end,
-                TimeBlock.end_at > row.window_start,
-                TimeBlock.status != "cancelled",
-            ).order_by(TimeBlock.start_at, TimeBlock.id)
+        await deliver_pending_checkin(
+            session,
+            checkin_id=checkin_id,
+            bot=bot,
+            user_id=user_id,
         )
-        block = block_result.scalars().first()
-        title = block.title if block is not None else "свободный интервал"
-        await bot.send_message(
-            user_id,
-            f"Сейчас по плану: {title}",
-            reply_markup=build_checkin_keyboard(row.id),
-        )
-        row.status = "sent"
-        row.updated_at = datetime.now(APP_TZ)
-        await session.commit()
 
 
 class CheckinSchedulerService:

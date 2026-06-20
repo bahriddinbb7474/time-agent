@@ -8,10 +8,11 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.db.models import Base
-from app.handlers.checkins import checkin_callback
+from app.db.models import ActivityEntry, Base
+from app.handlers.checkins import checkin_callback, checkin_test_cmd
 from app.keyboards.checkins import build_checkin_keyboard
 from app.services.daily_control_service import CheckinService
 
@@ -27,6 +28,24 @@ class _Callback:
 
     async def answer(self, text, show_alert=False):
         self.answers.append((text, show_alert))
+
+
+class _Bot:
+    def __init__(self) -> None:
+        self.sent = []
+
+    async def send_message(self, user_id, text, reply_markup=None):
+        self.sent.append((user_id, text, reply_markup))
+
+
+class _Message:
+    def __init__(self, user_id: int = USER_ID) -> None:
+        self.from_user = SimpleNamespace(id=user_id)
+        self.bot = _Bot()
+        self.answers = []
+
+    async def answer(self, text, reply_markup=None):
+        self.answers.append((text, reply_markup))
 
 
 @asynccontextmanager
@@ -74,9 +93,58 @@ async def test_missing_is_safe_and_keyboard_complete() -> None:
     assert len(buttons) == 5
 
 
+async def test_checkin_test_sends_nearest_pending_and_skips_deferred() -> None:
+    async with _session_ctx() as session:
+        service = CheckinService(session)
+        deferred = await service.create(
+            user_id=USER_ID,
+            window_start=datetime(2026, 6, 21, 8, tzinfo=TZ),
+            window_end=datetime(2026, 6, 21, 9, tzinfo=TZ),
+            prompted_at=datetime(2026, 6, 21, 9, tzinfo=TZ),
+            status="deferred", response_mode="protected_slot",
+        )
+        pending = await service.create(
+            user_id=USER_ID,
+            window_start=datetime(2026, 6, 21, 9, tzinfo=TZ),
+            window_end=datetime(2026, 6, 21, 10, tzinfo=TZ),
+            prompted_at=datetime(2026, 6, 21, 10, tzinfo=TZ),
+        )
+        message = _Message()
+        settings = SimpleNamespace(allowed_telegram_id=USER_ID)
+        await checkin_test_cmd(message, session, settings=settings)
+        assert len(message.bot.sent) == 1
+        assert "Сейчас по плану:" in message.bot.sent[0][1]
+        assert pending.status == "sent"
+        assert deferred.status == "deferred"
+        await checkin_test_cmd(message, session, settings=settings)
+        assert len(message.bot.sent) == 1
+        assert "Нет ожидающих check-in" in message.answers[-1][0]
+
+
+async def test_unknown_and_defer_create_no_activity_or_waste() -> None:
+    async with _session_ctx() as session:
+        service = CheckinService(session)
+        settings = SimpleNamespace(allowed_telegram_id=USER_ID)
+        for hour, action, expected in ((10, "unknown", "unknown"), (11, "defer", "deferred")):
+            row = await service.create(
+                user_id=USER_ID,
+                window_start=datetime(2026, 6, 21, hour, tzinfo=TZ),
+                window_end=datetime(2026, 6, 21, hour + 1, tzinfo=TZ),
+                prompted_at=datetime(2026, 6, 21, hour + 1, tzinfo=TZ),
+                status="sent",
+            )
+            await checkin_callback(
+                _Callback(f"checkin:{row.id}:{action}"), session, settings=settings
+            )
+            assert row.response_mode == expected
+        assert await session.scalar(select(func.count()).select_from(ActivityEntry)) == 0
+
+
 async def main_async() -> None:
     await test_actions_are_owner_only_and_idempotent()
     await test_missing_is_safe_and_keyboard_complete()
+    await test_checkin_test_sends_nearest_pending_and_skips_deferred()
+    await test_unknown_and_defer_create_no_activity_or_waste()
 
 
 def main() -> None:

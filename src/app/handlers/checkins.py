@@ -1,15 +1,45 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, Message
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import load_config
 from app.services.checkin_response_service import CheckinResponseService
 from app.services.daily_control_service import DailyControlNotFoundError
+from app.db.models import Checkin
+from app.services.checkin_scheduler_service import deliver_pending_checkin
 
 
 router = Router()
+
+
+@router.message(Command("checkin_test"))
+async def checkin_test_cmd(message: Message, session: AsyncSession, settings=None) -> None:
+    settings = settings or load_config()
+    user_id = getattr(getattr(message, "from_user", None), "id", None)
+    if settings.allowed_telegram_id is None or user_id != settings.allowed_telegram_id:
+        return
+    result = await session.execute(
+        select(Checkin)
+        .where(Checkin.user_id == user_id, Checkin.status == "pending")
+        .order_by(Checkin.window_start, Checkin.id)
+        .limit(1)
+    )
+    checkin = result.scalar_one_or_none()
+    if checkin is None:
+        await message.answer("Нет ожидающих check-in для безопасной проверки.")
+        return
+    delivered = await deliver_pending_checkin(
+        session,
+        checkin_id=checkin.id,
+        bot=message.bot,
+        user_id=user_id,
+    )
+    if not delivered:
+        await message.answer("Check-in уже обработан. Попробуй команду ещё раз позже.")
 
 
 @router.callback_query(F.data.startswith("checkin:"))
@@ -37,4 +67,3 @@ async def checkin_callback(callback: CallbackQuery, session: AsyncSession, setti
         "other": "Свободный ответ будет подключён следующим шагом.",
     }
     await callback.answer(labels.get(row.response_mode, "Ответ уже учтён."))
-
