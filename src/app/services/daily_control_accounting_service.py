@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import APP_TZ
-from app.db.models import ActivityEntry, TimeBlock
+from app.db.models import ActivityEntry, Checkin, TimeBlock
 
 
 UNACCOUNTED_CATEGORY = "unaccounted"
@@ -23,6 +23,9 @@ class DailyControlAccounting:
     unaccounted_minutes: float
     no_data_minutes: float
     owner_marked_waste_minutes: float
+    aligned_checkins: int = 0
+    unknown_checkins: int = 0
+    deferred_checkins: int = 0
     category_minutes: dict[str, float] = field(default_factory=dict)
 
 
@@ -68,6 +71,7 @@ class DailyControlAccountingService:
         day_start, day_end = _day_bounds(usage_date)
         blocks = await self._time_blocks(user_id, day_start, day_end)
         entries = await self._activity_entries(user_id, day_start, day_end)
+        checkins = await self._checkins(user_id, usage_date)
 
         planned_minutes = sum(
             _clipped_minutes(block.start_at, block.end_at, day_start, day_end)
@@ -118,6 +122,9 @@ class DailyControlAccountingService:
             unaccounted_minutes=unaccounted_minutes,
             no_data_minutes=no_data_minutes,
             owner_marked_waste_minutes=owner_marked_waste_minutes,
+            aligned_checkins=sum(row.response_mode == "aligned" for row in checkins),
+            unknown_checkins=sum(row.response_mode == "unknown" for row in checkins),
+            deferred_checkins=sum(row.status == "deferred" for row in checkins),
             category_minutes=category_minutes,
         )
 
@@ -130,6 +137,15 @@ class DailyControlAccountingService:
                 TimeBlock.status != "cancelled",
                 TimeBlock.start_at < day_end,
                 TimeBlock.end_at > day_start,
+            )
+        )
+        return list(result.scalars().all())
+
+    async def _checkins(self, user_id: int, usage_date: date) -> list[Checkin]:
+        result = await self.session.execute(
+            select(Checkin).where(
+                Checkin.user_id == user_id,
+                Checkin.usage_date == usage_date,
             )
         )
         return list(result.scalars().all())
