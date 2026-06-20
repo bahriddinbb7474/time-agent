@@ -53,8 +53,8 @@ async def checkin_callback(callback: CallbackQuery, session: AsyncSession, setti
         if prefix != "checkin":
             raise ValueError
         checkin_id = int(raw_id)
-        row = await CheckinResponseService(session).respond(
-            checkin_id=checkin_id, user_id=user_id, action=action
+        row = await CheckinResponseService(session).respond_value(
+            checkin_id=checkin_id, user_id=user_id, value=action
         )
     except (ValueError, DailyControlNotFoundError):
         await callback.answer("Check-in не найден или кнопка устарела.", show_alert=True)
