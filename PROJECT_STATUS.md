@@ -6,10 +6,10 @@
 
 ## Current Stage
 
-- Stage 20.2 Schedule Proposal Builder: **CLOSED / PRODUCTION PASS**.
-- Repository production baseline: `e398861` (Stage 20.2-A/B/C/D complete).
-- Production HEAD (last deployed): `e398861`.
-- Next: Stage 20.3 Confirmation UX / schedule proposal review.
+- Stage 20.3 Confirmation UX / schedule proposal review: **CLOSED / PRODUCTION PASS**.
+- Repository production baseline: `ff9b879` (Stage 20.3 + hotfixes complete).
+- Production HEAD (last deployed): `ff9b879`.
+- Next: Stage 20.4 Check-in Scheduler / periodic plan control.
 
 ## Completed Stages
 
@@ -20,10 +20,11 @@
 - 19.1–19.9: DONE / LLM Capture Intelligence CLOSED. See `docs/CURRENT_STATE.md`.
 - 20.1-A/B/C: DONE / Daily Control Foundation CLOSED. See `docs/CURRENT_STATE.md`.
 - 20.2-A/B/C/D: DONE / Schedule Proposal Builder CLOSED. See `docs/CURRENT_STATE.md`.
+- 20.3 + hotfixes: DONE / Confirmation UX and schedule review CLOSED. See `docs/CURRENT_STATE.md`.
 
 ## Current Route
 
-- **Stage 20.3**: Confirmation UX / schedule proposal review — next.
+- **Stage 20.4**: Check-in Scheduler / periodic plan control — next.
 - Stage 21: Task Lifecycle.
 - Stage 22: Production hardening + main DoD.
 - Stage 23: Idea Vault.

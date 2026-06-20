@@ -1,7 +1,60 @@
 # Current State — Time-Agent
 
-> Last updated: Stage 20.2 CLOSED (2026-06-19).
+> Last updated: Stage 20.3 CLOSED (2026-06-20).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
+
+## Stage 20.3 — Confirmation UX / Schedule Proposal Review: CLOSED
+
+Stage 20.3 and its production hotfixes are complete and production-smoked.
+
+### What was built
+
+**Stage 20.3 — confirmation service and review command**
+- Owner-only `/schedule_tomorrow` command added for schedule proposal review.
+- Durable confirmation service added for proposal lifecycle.
+- Production baseline commits:
+  - `f35f4da` — confirmation service
+  - `5790e1e` — review command
+
+**Stage 20.3 — callbacks and edit foundation**
+- Confirm / decline / rebuild callbacks added.
+- Safe edit foundation/stub added; edit path remains non-destructive.
+- Production baseline commits:
+  - `d4e0d4f` — callbacks
+  - `83d7ad2` — edit foundation
+  - `31b30d5` — smoke contract
+
+**Production hotfixes**
+- Protected sleep/prayer overlap handling fixed.
+- Handler path fails closed on builder validation errors.
+- Confirmed schedule is shown directly before rebuild instead of silently replacing active state.
+- Hotfix commits:
+  - `946c913` — protected overlap fix
+  - `d115feb` — fail-closed handler
+  - `ff9b879` — show confirmed schedule before rebuilding
+
+### Production smoke result
+
+- Production HEAD: `ff9b879`
+- `/schedule_tomorrow` shows confirmed schedule
+- Repeated command shows existing confirmed plan, not a new draft
+- Rebuild from confirmed schedule does not replace the active confirmed schedule
+- Edit path shows a safe stub
+- Container logs: no traceback / error / exception during smoke
+
+### Stage 20.3 boundaries
+
+- No scheduler wiring yet
+- No morning briefing wiring yet
+- No OpenRouter calls
+- Advisor runtime remains default OFF
+
+### Stage verdict
+
+- Stage 20.3: **CLOSED / PRODUCTION PASS**
+- Next stage: **Stage 20.4 — Check-in Scheduler / periodic plan control**
+
+---
 
 ## Stage 20.2 — Schedule Proposal Builder: CLOSED
 
@@ -180,9 +233,9 @@ text message
 
 ---
 
-## Next: Stage 20.3 — Confirmation UX / schedule proposal review
+## Next: Stage 20.4 — Check-in Scheduler / periodic plan control
 
-Stage 20.2 proposal builder is closed. The next planned step is Stage 20.3.
+Stage 20.3 confirmation/review is closed. The next planned step is Stage 20.4.
 
 ---
 
