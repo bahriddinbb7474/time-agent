@@ -2,7 +2,12 @@
 > Superseded by `docs/TZ_TIME_AGENT_FINAL_v8_1.md`.
 > Do not use this file for planning new stages.
 
-# ТЗ Time-Agent: план реализации до финала — версия архитектора (v7.1)
+# ARCHIVED / SUPERSEDED — ТЗ Time-Agent v7.1
+
+> This document is historical only. The authoritative roadmap is
+> `docs/TZ_TIME_AGENT_FINAL_v8_1.md` with the v8.2 roadmap correction.
+> Do not use Stage numbering, Google Calendar references, or acceptance scope here
+> for new implementation work.
 
 **Дата:** 14.06.2026
 **Назначение:** единый рабочий план от текущего production-состояния до завершённого Time-Agent.

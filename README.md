@@ -1,6 +1,10 @@
 # Time-Agent
 
-Telegram-first Personal Mental Load Dispatcher / external memory assistant.
+Telegram-first goal-driven life dispatcher / external memory.
+
+Time-Agent connects life goals to the daily plan, helps during the day, captures
+urgent changes and facts, summarizes approximately where 24 valuable hours went,
+and helps improve tomorrow.
 
 Canonical project plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`.
 
@@ -18,36 +22,31 @@ Current short snapshot: `TZ_CURRENT_SHORT.md`.
 
 ## Current Status
 
-- 18.6-C0 / 18.6-C / 18.6-D: CLOSED / PRODUCTION PASS.
-- PRE-18.7-A/B: CLOSED / audit and crisis fix done.
-- PRE-18.7-C: current — docs cleanup.
-- Production HEAD (last deployed): `2c9b47e`.
-- Repository HEAD: `1e81d73`.
+- Stages through 20.6: CLOSED / production PASS.
+- Stage 20.7-A unknown policy hardening: local PASS (`a9e703e`).
+- Production HEAD (last deployed): `8973f80`.
+- Current implementation target: Stage 20-FINAL.
 
 ## Current Route
 
-- 18.6-C0: DONE.
-- 18.6-C: DONE.
-- 18.6-D: DONE.
-- PRE-18.7: audits and fixes (in progress).
-- 18.7: Daily Targets MVP.
-- 19: LLM Capture Intelligence.
-- 20: Daily Control 24/7.
-- 21: Task Lifecycle.
-- 22: Production hardening + main DoD.
-- 23: Idea Vault.
-- 24: Statistics & Forecasting.
+1. Stage 20-FINAL — 24-hour mirror MVP.
+2. Stage 21 — Goal Engine.
+3. Stage 22 — Ideas + Relationships.
+4. Stage 23 — Production finish + final acceptance.
 
 ## Core Decisions
 
 - Daily Targets is part of the main product and does not depend on LLM.
 - Daily Control is part of the main product after Stage 19.
-- Stage 23-24 are post-final modules and do not move the main DoD.
+- Ideas and relationships are part of the v1 path.
 - Sleep is a protected metric.
-- Owner-only category `впустую` is selected only by the owner.
+- `Впустую` is accepted only from owner text/voice and only after proposal confirmation; it is not a primary button UX.
 - Button check-ins are rules-first and do not call LLM.
 - Free text or voice uses at most one LLM call.
 - The owner chooses the executor before each stage: Codex or Claude Code.
+
+Google Calendar and external calendar integrations are removed from current scope.
+Only legacy tables/repositories remain for a later safe cleanup audit.
 
 ## Verification
 

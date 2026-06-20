@@ -1,7 +1,54 @@
 # Current State — Time-Agent
 
-> Last updated: Stage 20.6 CLOSED (2026-06-20).
+> Last updated: roadmap correction after Stage 20.7-A (2026-06-21).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
+
+## Authoritative Current Direction
+
+Time-Agent is a Telegram-first goal-driven life dispatcher / external memory:
+
+`life goals → daily plan → dynamic day support → urgent capture → fact accounting → 24-hour summary → tomorrow plan`
+
+The owner wants an approximate, honest view of where 24 valuable hours went and a
+small actionable improvement for tomorrow. Google Calendar and external integrations
+are removed from current scope; remaining calendar tables/repositories are legacy cleanup only.
+
+### Git and rollout state
+
+- Repository HEAD before this documentation update: `a9e703e`.
+- Production HEAD: `8973f80`.
+- Stage 20.7-A unknown policy hardening is local PASS and creates no fake activity.
+- Rejected Stage 20.7 B/C/D/E waste-button commits are not in `main`.
+
+### Important current gaps
+
+- `Сделал` marks a task done but does not create an actual fact interval.
+- Check-in `Другое` currently writes owner text directly as ActivityEntry; this must be replaced by LLM proposal + confirmation.
+- Unknown/no-answer/no-data semantics are not yet integrated into the final accounting report.
+- Existing evening summary is not the final 24-hour mirror.
+- Categories are coarse strings, not the shared life/time-group dictionary.
+
+## Final v1 Roadmap
+
+1. **Stage 20-FINAL — 24-hour mirror MVP**
+   - shared time groups;
+   - planned completion → idempotent fact;
+   - check-in text/voice → LLM proposal → owner confirmation → fact;
+   - no answer = no-data; no fake activity and no auto-waste;
+   - evening 24-hour group summary and tomorrow advice;
+   - privacy/cost regression and production smoke.
+2. **Stage 21 — Goal Engine**
+   - reuse Daily Targets;
+   - add small daily/monthly/six-month/year goal management;
+   - map every goal to a time group and surface it in planning/review.
+3. **Stage 22 — Ideas + Relationships**
+   - minimal Idea Vault with status, next step and notes;
+   - extend RelativesContactRule into simple family/close/friends/work reminders.
+4. **Stage 23 — Production finish + final acceptance**
+   - hardening, backup/restore, scheduler recovery, health, final Telegram/VPS smoke and docs;
+   - legacy calendar cleanup only after a safe migration audit.
+
+Advanced statistics/forecasting, web UI, complex CRM/ERP and exact time tracking are post-v1.
 
 ## Stage 20.6 — Свободный текст и голос: CLOSED
 
@@ -51,7 +98,7 @@ Stage 20.6 is complete and production-smoked.
 ### Stage verdict
 
 - Stage 20.6: **CLOSED / PRODUCTION PASS**
-- Next stage: **Stage 20.7 — `не помню`, неучтённое и `впустую`**
+- Superseded next-stage note: active roadmap now continues with **Stage 20-FINAL**.
 
 ## Stage 20.5 — Rules-first ответы: CLOSED
 
@@ -388,9 +435,11 @@ text message
 
 ---
 
-## Next: Stage 20.7 — `не помню`, неучтённое и `впустую`
+## Next: Stage 20-FINAL — 24-hour mirror MVP
 
-Stage 20.6 free text and voice is closed. The next planned step is Stage 20.7.
+Stage 20.6 is closed and Stage 20.7-A is a safe local policy hardening. The rejected
+waste-button continuation was rolled back. Continue only through the authoritative
+Stage 20-FINAL roadmap above.
 
 ---
 

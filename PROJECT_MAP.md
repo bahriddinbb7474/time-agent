@@ -5,7 +5,9 @@
 
 ## Purpose
 
-Time-Agent is a Telegram bot for personal mental-load dispatching with context-aware scheduling: protected slots, sleep windows, prayer windows, Siyam/health context, reminders, capture drafts, and planning.
+Time-Agent is a Telegram-first goal-driven life dispatcher and external memory:
+life goals → daily plan → dynamic day support → urgent capture → fact accounting →
+24-hour summary → tomorrow plan.
 
 ## Current Route
 
@@ -17,11 +19,43 @@ Time-Agent is a Telegram bot for personal mental-load dispatching with context-a
 - Stage 20.4 Check-in Scheduler / periodic plan control: DONE / production PASS / CLOSED.
 - Stage 20.5 Rules-first ответы: DONE / production PASS / CLOSED; depends on Stage 20.4.
 - Stage 20.6 Свободный текст и голос: DONE / production PASS / CLOSED.
-- **Stage 20.7**: `не помню`, неучтённое и `впустую` — next.
-- Stage 21: Task Lifecycle.
-- Stage 22: Production hardening + main DoD.
-- Stage 23: Idea Vault.
-- Stage 24: Statistics & Forecasting; depends on sufficient data quality.
+- Stage 20.7-A unknown policy hardening: local PASS (`a9e703e`).
+- **Stage 20-FINAL**: 24-hour mirror MVP — next.
+- Stage 21: Goal Engine.
+- Stage 22: Ideas + Relationships.
+- Stage 23: Production finish + final acceptance.
+
+Google Calendar and integrations are removed from current scope. Legacy DB/repository
+artifacts are cleanup-only and are not a v1 dependency.
+
+## Already Done Before Stage 20-FINAL
+
+| Area | Status | Important boundary |
+|---|---|---|
+| Telegram foundation | DONE | Owner-only handlers and callbacks |
+| Scheduler/recovery | PARTIAL | Alerts/check-ins recover; no-answer lifecycle still incomplete |
+| Docker/deploy and Asia/Tashkent | DONE | Production uses local SQLite on VPS |
+| Prayer/Hanafi/protected slots | DONE | Prayer remains higher priority than suggestions |
+| Siyam/health and sleep/family protection | PARTIAL | Useful foundation, not a complete life policy engine |
+| Task CRUD | DONE | Existing lifecycle must be preserved |
+| `/today` + `Сделал` | PARTIAL | Marks Task done but does not create ActivityEntry |
+| Schedule proposal/confirmation | DONE | Edit/replanning remains foundation |
+| Dynamic replanning | FOUNDATION | Boss/crisis pieces exist; no generalized dispatcher |
+| Daily Control schema | DONE | DailySchedule, TimeBlock, ActivityEntry, Checkin |
+| Activity domain | FOUNDATION | Safe interval CRUD exists |
+| 24-hour accounting/evening report | PARTIAL | Not yet the final 24-hour mirror |
+| Check-in policy/scheduler | PARTIAL | 60/120-minute windows and protected deferral exist |
+| Rules-first replies | DONE | Known replies bypass LLM |
+| Check-in free text | WRONG_DIRECTION | `Другое` currently writes a direct fact without LLM proposal confirmation |
+| Advisor/OpenRouter safety | DONE | Default OFF; limits and confirmation gates exist |
+| Voice/STT safety | DONE | Voice activity proposal works only partially end-to-end |
+| Privacy/API usage | DONE | Technical metadata only |
+| Time groups/categories | FOUNDATION | Current categories are too coarse |
+| Daily goals/targets | PARTIAL | Quantitative daily targets exist |
+| Monthly/year goals | NOT_FOUND | Stage 21 |
+| Idea Vault | DOCS_ONLY | Stage 22 |
+| Relationships | FOUNDATION | RelativesContactRule and candidate service exist |
+| Boss/urgent | PARTIAL | Generalized dynamic dispatcher is not implemented |
 
 ## Repository Structure
 
@@ -39,7 +73,6 @@ time-agent/
 │  │  ├─ today.py                     # /today, /siyam_on, /siyam_off
 │  │  ├─ rules.py                     # /rules
 │  │  ├─ targets.py                   # Daily targets commands (Stage 18.7)
-│  │  ├─ daily_control.py             # Daily Control command/callback wiring (Stage 20.1 foundation)
 │  │  ├─ capture.py                   # Voice and text capture drafts; advisor wiring (Stage 19)
 │  │  ├─ advisor.py                   # /advisor_status, /advisor_on, /advisor_off (Stage 19.9)
 │  │  ├─ usage.py                     # /usage API stats command
@@ -66,14 +99,15 @@ time-agent/
 │  │  ├─ advisor_proposal_validator.py    # Validate proposal against context/prayer rules (Stage 19)
 │  │  ├─ ai_advisor_provider.py       # OpenRouter/fake/disabled providers; injection-safe prompt (Stage 19)
 │  │  ├─ daily_control_service.py     # Daily schedule / block / check-in domain services (Stage 20.1)
-│  │  ├─ activity_accounting_service.py   # Interval accounting and activity rollups (Stage 20.1-C)
+│  │  ├─ daily_control_accounting_service.py # Interval accounting and activity rollups
 │  │  ├─ schedule_proposal_builder.py     # Deterministic proposal builder with protected slots (Stage 20.2)
 │  │  ├─ schedule_input_collector.py      # Cached prayer/sleep/timed-task proposal inputs (Stage 20.2-C)
 │  │  ├─ schedule_proposal_formatter.py   # Privacy-aware proposal summary formatter, max 15 lines (Stage 20.2-D)
 │  │  ├─ schedule_confirmation_service.py # Durable confirmation/review flow for schedule drafts (Stage 20.3)
 │  │  ├─ schedule_edit_service.py         # Safe edit foundation/stub; fail-closed until real edit flow (Stage 20.3)
 │  │  ├─ checkin_policy_service.py        # Durable 60/120-minute check-in policy foundation (Stage 20.4)
-│  │  └─ checkin_accounting_service.py    # aligned/unknown/deferred accounting with no fake activity (Stage 20.4)
+│  │  ├─ checkin_response_service.py      # check-in response lifecycle and confirmed facts
+│  │  └─ checkin_scheduler_service.py     # check-in delivery and restart recovery
 │  ├─ scheduler/
 │  │  ├─ scheduler.py                 # APScheduler setup and alert recovery
 │  │  └─ jobs.py                      # Briefings, prayer cache, alert firing

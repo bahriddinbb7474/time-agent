@@ -7,9 +7,11 @@
 ## Current Stage
 
 - Stage 20.6 Свободный текст и голос: **CLOSED / PRODUCTION PASS**.
-- Repository production baseline: `8973f80` (Stage 20.6 complete).
+- Stage 20.7-A unknown policy hardening: **LOCAL PASS** (`a9e703e`).
+- Repository HEAD: `a9e703e`.
 - Production HEAD (last deployed): `8973f80`.
-- Next: Stage 20.7 `не помню`, неучтённое и `впустую`.
+- Next: **Stage 20-FINAL — 24-hour mirror MVP**.
+- The rejected waste-button direction is not in `main`; it exists only on the backup branch.
 
 ## Completed Stages
 
@@ -24,14 +26,16 @@
 - 20.4: DONE / Check-in Scheduler and periodic plan control CLOSED. See `docs/CURRENT_STATE.md`.
 - 20.5: DONE / Rules-first responses CLOSED. See `docs/CURRENT_STATE.md`.
 - 20.6: DONE / Free text and voice CLOSED. See `docs/CURRENT_STATE.md`.
+- 20.7-A: DONE / local PASS / not pushed. Unknown remains rules-first and creates no fake activity.
 
 ## Current Route
 
-- **Stage 20.7**: `не помню`, неучтённое и `впустую` — next.
-- Stage 21: Task Lifecycle.
-- Stage 22: Production hardening + main DoD.
-- Stage 23: Idea Vault.
-- Stage 24: Statistics & Forecasting.
+- **Stage 20-FINAL**: 24-hour mirror MVP.
+- Stage 21: Goal Engine.
+- Stage 22: Ideas + Relationships.
+- Stage 23: Production finish + final acceptance.
+
+Advanced statistics/forecasting, web UI, complex CRM/ERP, and exact time tracking are post-v1.
 
 ## Planning Rule
 

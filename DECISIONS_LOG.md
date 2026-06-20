@@ -3,6 +3,18 @@
 > Historical or summary document.
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`.
 
+## 2026-06-21 — Final v1 roadmap correction
+
+This decision supersedes the 2026-06-15 Stage 20–24 ordering where they conflict.
+
+1. Time-Agent is a Telegram-first goal-driven life dispatcher / external memory.
+2. Active route: Stage 20-FINAL → Stage 21 Goal Engine → Stage 22 Ideas + Relationships → Stage 23 Production finish.
+3. Google Calendar/integrations are removed from current scope; remaining artifacts are legacy cleanup only.
+4. Free check-in text/voice requires LLM interpretation, structured proposal and owner confirmation before fact mutation.
+5. No answer remains no-data; the bot does not invent activity or waste.
+6. `Впустую` comes only from owner text/voice plus confirmed proposal; no primary waste button.
+7. Advanced statistics/forecasting, web UI, complex CRM/ERP and exact time tracking are post-v1.
+
 ## 2026-06-15 — Time-Agent plan v8.1 adopted
 
 1. Daily Targets включён как Stage 18.7.
@@ -17,7 +29,10 @@
 10. Сон protected.
 11. `Впустую` только owner-selected.
 
-## Visible Architecture Decisions
+## Historical architecture snapshot
+
+The entries below describe earlier repository history. They are not authoritative
+where they conflict with the 2026-06-21 correction or the canonical plan.
 
 - Telegram-first interface: the application is an aiogram Telegram bot, started from `app.main`.
 - Owner-only access: `OwnerOnlyMiddleware` allows only `ALLOWED_TELEGRAM_ID`; if it is missing, access fails closed.

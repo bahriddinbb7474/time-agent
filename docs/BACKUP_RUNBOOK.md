@@ -1,4 +1,7 @@
-# Backup Runbook — Time-Agent Stage 22.1
+# Backup Runbook — Time-Agent Production Finish
+
+> Historical references to Stage 22.1 mean the backup work now consolidated into
+> Stage 23 Production finish. The operational commands remain valid.
 
 ## What this does
 

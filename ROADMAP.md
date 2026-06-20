@@ -5,38 +5,24 @@
 
 ## Current Status
 
-- 18.6-C0: CLOSED / PRODUCTION PASS.
-- 18.6-C: CLOSED / PRODUCTION PASS.
-- 18.6-D: CLOSED / PRODUCTION PASS.
-- PRE-18.7-A: CLOSED / audit PASS.
-- PRE-18.7-B: CLOSED / pushed (`1e81d73`).
-- PRE-18.7-C: current — docs cleanup.
-- Production HEAD (last deployed): `2c9b47e`.
-- Repository HEAD: `1e81d73`.
-- Stage 18.7 is not started.
+- Stages through 20.6: CLOSED / production PASS.
+- Stage 20.7-A: local PASS (`a9e703e`).
+- Current target: Stage 20-FINAL.
+- Production HEAD: `8973f80`.
 
 ## Route
 
-- 18.6-C0: DONE.
-- 18.6-C: DONE.
-- 18.6-D: DONE.
-- PRE-18.7-A/B/C: DONE / in progress.
-- Remaining before 18.7: Telegram nightly backup (HIGH/OPEN), single-instance PID guard decision.
-- 18.7: Daily Targets MVP.
-- 19: LLM Capture Intelligence.
-- 20: Daily Control 24/7.
-- 21: Task Lifecycle.
-- 22: Production hardening + main DoD.
-- 23: Idea Vault.
-- 24: Statistics & Forecasting.
+1. Stage 20-FINAL — time groups, planned completion accounting, confirmed text/voice facts, no-data semantics, and the 24-hour mirror.
+2. Stage 21 — small Goal Engine across daily, monthly, six-month, and yearly horizons.
+3. Stage 22 — minimal Ideas + Relationships modules.
+4. Stage 23 — production hardening, deploy, observation, and final acceptance.
 
-## Dependencies
+## Boundaries
 
-- Daily Targets does not depend on LLM.
-- Daily Targets depends on completed audits and migration foundation.
-- Daily Control depends on Stage 19.
-- Statistics depends on sufficient data quality.
-- Stage 23-24 are post-final modules and do not move the main DoD.
+- Google Calendar and integrations are not current scope.
+- Free check-in text/voice requires an LLM proposal and owner confirmation before a fact write.
+- No answer remains no-data; the bot does not invent activity or waste.
+- Advanced statistics/forecasting, web UI, complex CRM/ERP, and exact time tracking are post-v1.
 
 ## Executor Rule
 
