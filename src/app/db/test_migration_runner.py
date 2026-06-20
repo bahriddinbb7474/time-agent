@@ -114,6 +114,10 @@ def _assert_final_schema(
                 "daily_schedules", "time_blocks", "activity_entries", "checkins",
             }:
                 assert table_name in _table_names(conn)
+        if "20260620_1200_add_checkin_schedule_context" in expected_versions:
+            assert {"schedule_id", "schedule_version", "usage_date"}.issubset(
+                _columns(conn, "checkins")
+            )
         assert _migration_versions(conn) == expected_versions
     finally:
         conn.close()
@@ -128,6 +132,7 @@ _ALL_REAL_VERSIONS = [
     "20260616_0000_add_daily_targets",
     "20260617_1200_capture_drafts_add_advisor_proposal",
     "20260619_1200_add_daily_control_core",
+    "20260620_1200_add_checkin_schedule_context",
 ]
 
 

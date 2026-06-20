@@ -17,6 +17,7 @@ def main():
             "20260616_0000_add_daily_targets",
             "20260617_1200_capture_drafts_add_advisor_proposal",
             "20260619_1200_add_daily_control_core",
+            "20260620_1200_add_checkin_schedule_context",
         ]
 
         import sqlite3
