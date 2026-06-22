@@ -4,6 +4,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from app.services.crisis_stack_service import CrisisStackService
+from app.services.categories import TIME_GROUPS, normalize_activity_time_group
+from app.services.daily_control_accounting_service import DailyControlAccounting
 
 
 @dataclass(slots=True)
@@ -17,6 +19,7 @@ class EveningPlanningInput:
     health_lines: Sequence[str] = field(default_factory=list)
     google_tomorrow_lines: Sequence[str] = field(default_factory=list)
     targets_lines: Sequence[str] = field(default_factory=list)
+    mirror_lines: Sequence[str] = field(default_factory=list)
 
 
 def build_evening_planning_message(data: EveningPlanningInput) -> str:
@@ -24,6 +27,7 @@ def build_evening_planning_message(data: EveningPlanningInput) -> str:
         "🕘 Вечерний план",
     ]
 
+    _append_text_section(lines, "🪞 Итог 24 часов", data.mirror_lines)
     _append_text_section(lines, "🕋 Намазы", data.prayer_lines)
     _append_text_section(lines, "📖 Коран", data.quran_lines)
     _append_text_section(lines, "💧 Здоровье/сиям", data.health_lines)
@@ -53,6 +57,115 @@ def build_evening_planning_message(data: EveningPlanningInput) -> str:
 
     lines.extend(["", "Что главное завтра?"])
     return "\n".join(lines)
+
+
+def build_evening_24_hour_lines(
+    accounting: DailyControlAccounting,
+    *,
+    done_count: int | None = None,
+    unfinished_count: int | None = None,
+) -> list[str]:
+    labels = {group.code: group.label for group in TIME_GROUPS}
+    grouped: dict[str, float] = {}
+    additional_no_data = 0.0
+
+    for category, minutes in accounting.category_minutes.items():
+        code = normalize_activity_time_group(category)
+        if code == "waste":
+            continue
+        if code == "no_data":
+            additional_no_data += minutes
+            continue
+        grouped[code] = grouped.get(code, 0.0) + minutes
+
+    lines: list[str] = []
+    for group in TIME_GROUPS:
+        if group.code in {"no_data", "waste"}:
+            continue
+        minutes = grouped.get(group.code, 0.0)
+        if minutes > 0:
+            lines.append(f"{labels[group.code]}: {_format_minutes(minutes)}")
+
+    if accounting.unknown_minutes > 0:
+        lines.append(f"Не помню: {_format_minutes(accounting.unknown_minutes)}")
+
+    no_data_minutes = accounting.no_data_minutes + additional_no_data
+    unmarked_waste = max(
+        0.0,
+        accounting.category_minutes.get("waste", 0.0)
+        - accounting.owner_marked_waste_minutes,
+    )
+    no_data_minutes += unmarked_waste
+    if no_data_minutes > 0:
+        lines.append(f"{labels['no_data']}: {_format_minutes(no_data_minutes)}")
+
+    if accounting.protected_minutes > 0:
+        lines.append(
+            "Защищённые интервалы (план): "
+            f"{_format_minutes(accounting.protected_minutes)}"
+        )
+
+    if accounting.owner_marked_waste_minutes > 0:
+        lines.append(
+            f"{labels['waste']}: "
+            f"{_format_minutes(accounting.owner_marked_waste_minutes)}"
+        )
+
+    lines.extend(
+        [
+            "",
+            "План:",
+            f"⏱ Запланировано: {_format_minutes(accounting.planned_minutes)}",
+            f"⏱ Подтверждено фактом: {_format_minutes(accounting.actual_minutes)}",
+        ]
+    )
+    if done_count is not None:
+        lines.append(f"✅ Сделано: {done_count}")
+    if unfinished_count is not None:
+        lines.append(f"❌ Не сделано по плану: {unfinished_count}")
+
+    lines.extend(
+        [
+            "",
+            "Совет:",
+            _build_tomorrow_advice(
+                accounting=accounting,
+                grouped=grouped,
+                no_data_minutes=no_data_minutes,
+            ),
+        ]
+    )
+    return lines
+
+
+def _format_minutes(value: float) -> str:
+    total = max(0, int(round(value)))
+    hours, minutes = divmod(total, 60)
+    if hours and minutes:
+        return f"{hours}ч {minutes}м"
+    if hours:
+        return f"{hours}ч"
+    return f"{minutes}м"
+
+
+def _build_tomorrow_advice(
+    *,
+    accounting: DailyControlAccounting,
+    grouped: dict[str, float],
+    no_data_minutes: float,
+) -> str:
+    if no_data_minutes >= 120:
+        return "Завтра чаще отвечай на check-in."
+    if accounting.owner_marked_waste_minutes > 0:
+        return "Завтра поставь защиту от отвлечений."
+    if grouped.get("sport", 0.0) <= 0:
+        return "Можно добавить короткую ходьбу."
+    if (
+        grouped.get("family_time", 0.0) <= 0
+        and grouped.get("relationships", 0.0) <= 0
+    ):
+        return "Можно выделить время семье или близким."
+    return "День хорошо покрыт, завтра выбери 2 главных блока."
 
 
 def _append_done_today_section(lines: list[str], tasks: Sequence, limit: int = 5) -> None:

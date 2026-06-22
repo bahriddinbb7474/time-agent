@@ -12,9 +12,11 @@ from app.db.models import AlertQueue
 from app.services.boss_priority_service import BossPriorityService
 from app.services.family_contact_service import FamilyContactService
 from app.services.daily_context_service import DailyContextService
+from app.services.daily_control_accounting_service import DailyControlAccountingService
 from app.services.daily_plan_service import DailyPlanService
 from app.services.evening_planning_service import (
     EveningPlanningInput,
+    build_evening_24_hour_lines,
     build_evening_planning_message,
 )
 from app.services.morning_briefing_service import (
@@ -230,6 +232,22 @@ async def evening_summary(bot) -> None:
         prayer_section = await _build_prayer_status_section(session)
         quran_lines = [quran_service.build_deficit_message(quran_summary)]
         health_lines = await _build_health_status_section(session)
+        mirror_lines: list[str] = []
+        if cfg.allowed_telegram_id:
+            try:
+                accounting = await DailyControlAccountingService(session).summarize(
+                    user_id=cfg.allowed_telegram_id,
+                    usage_date=datetime.now(APP_TZ).date(),
+                )
+                mirror_lines = build_evening_24_hour_lines(
+                    accounting,
+                    done_count=len(done_today),
+                    unfinished_count=len(timed),
+                )
+                # `later` is backlog, not a reliable daily postponement signal.
+                # A postponed counter stays omitted until lifecycle records it.
+            except Exception:
+                log.exception("Evening 24-hour accounting failed")
         followup_keyboard = None
         if not quran_summary.goal_reached and cfg.allowed_telegram_id:
             alert_id = await _ensure_quran_followup_alert(
@@ -263,6 +281,7 @@ async def evening_summary(bot) -> None:
                 health_lines=health_lines,
                 google_tomorrow_lines=[],
                 targets_lines=await _build_targets_evening_section(session),
+                mirror_lines=mirror_lines,
             )
         )
 
