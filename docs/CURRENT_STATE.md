@@ -1,6 +1,6 @@
 # Current State — Time-Agent
 
-> Last updated: roadmap correction after Stage 20.7-A (2026-06-21).
+> Last updated: Stage 20-FINAL text-first hotfix deployed and smoked (2026-06-22).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
 
 ## Authoritative Current Direction
@@ -15,18 +15,23 @@ are removed from current scope; remaining calendar tables/repositories are legac
 
 ### Git and rollout state
 
-- Repository HEAD before this documentation update: `a9e703e`.
-- Production HEAD: `8973f80`.
+- Repository HEAD before this documentation update: `148304c`.
+- Production HEAD: `148304c`.
+- Stage 20-FINAL hotfix `148304c` (`fix: make check-ins text-first`) is pushed, pulled on VPS and deployed with `docker compose up -d --build`.
+- Telegram smoke PASS:
+  - `/checkin_test` shows the text/voice-first message without the old 5 buttons.
+  - Voice/text with AI OFF fails closed and saves nothing.
+  - `не помню` stays rules-first and returns `Записано: нет данных.`
 - Stage 20.7-A unknown policy hardening is local PASS and creates no fake activity.
 - Rejected Stage 20.7 B/C/D/E waste-button commits are not in `main`.
 
 ### Important current gaps
 
 - `Сделал` marks a task done but does not create an actual fact interval.
-- Check-in `Другое` currently writes owner text directly as ActivityEntry; this must be replaced by LLM proposal + confirmation.
 - Unknown/no-answer/no-data semantics are not yet integrated into the final accounting report.
 - Existing evening summary is not the final 24-hour mirror.
 - Categories are coarse strings, not the shared life/time-group dictionary.
+- Next implementation step: gap-driven planner.
 
 ## Final v1 Roadmap
 
@@ -435,11 +440,11 @@ text message
 
 ---
 
-## Next: Stage 20-FINAL — 24-hour mirror MVP
+## Next: gap-driven planner
 
-Stage 20.6 is closed and Stage 20.7-A is a safe local policy hardening. The rejected
-waste-button continuation was rolled back. Continue only through the authoritative
-Stage 20-FINAL roadmap above.
+Stage 20-FINAL text-first hotfix `148304c` is deployed and Telegram-smoked in production.
+Continue with the gap-driven planner only. Google Calendar and external integrations remain
+out of scope and must not be restored.
 
 ---
 
