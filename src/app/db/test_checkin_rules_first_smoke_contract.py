@@ -31,7 +31,9 @@ def main() -> None:
     ).lower()
     assert "openrouter" not in source
     assert "advisor_runtime" not in source
-    assert "waste_marked_by_owner=false" in source.replace(" ", "")
+    normalized = source.replace(" ", "")
+    assert "owner_confirmed=true" in normalized
+    assert 'waste_marked_by_owner=category=="waste"andwaste_explicit' in normalized
     print("PASS: rules-first check-in smoke contract is complete and isolated")
 
 

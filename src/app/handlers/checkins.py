@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
@@ -7,12 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import load_config
-from app.services.checkin_response_service import CheckinResponseService
-from app.services.daily_control_service import DailyControlNotFoundError
+from app.core.time import now_tz
 from app.db.models import Checkin
-from app.services.checkin_scheduler_service import deliver_pending_checkin
 from app.services.checkin_context_service import CheckinContextService
 from app.services.checkin_response_classifier import CheckinResponseClassifier
+from app.services.checkin_response_service import CheckinResponseService
+from app.services.checkin_scheduler_service import deliver_pending_checkin
+from app.services.daily_control_service import CheckinService, DailyControlNotFoundError
 
 
 router = Router()
@@ -58,8 +61,15 @@ async def checkin_test_cmd(message: Message, session: AsyncSession, settings=Non
     )
     checkin = result.scalar_one_or_none()
     if checkin is None:
-        await message.answer("Нет ожидающих check-in для безопасной проверки.")
-        return
+        now = now_tz()
+        checkin = await CheckinService(session).create(
+            user_id=user_id,
+            window_start=now - timedelta(hours=1),
+            window_end=now,
+            prompted_at=now,
+            status="pending",
+            usage_date=now.date(),
+        )
     delivered = await deliver_pending_checkin(
         session,
         checkin_id=checkin.id,
@@ -68,6 +78,8 @@ async def checkin_test_cmd(message: Message, session: AsyncSession, settings=Non
     )
     if not delivered:
         await message.answer("Check-in уже обработан. Попробуй команду ещё раз позже.")
+        return
+    await message.answer("Тестовый check-in создан. Ответьте, что было за последний час.")
 
 
 @router.callback_query(F.data.startswith("checkin:"))

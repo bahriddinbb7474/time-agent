@@ -93,7 +93,7 @@ async def test_missing_is_safe_and_keyboard_complete() -> None:
     assert len(buttons) == 5
 
 
-async def test_checkin_test_sends_nearest_pending_and_skips_deferred() -> None:
+async def test_checkin_test_sends_nearest_pending_and_creates_fallback_window() -> None:
     async with _session_ctx() as session:
         service = CheckinService(session)
         deferred = await service.create(
@@ -116,9 +116,16 @@ async def test_checkin_test_sends_nearest_pending_and_skips_deferred() -> None:
         assert "Сейчас по плану:" in message.bot.sent[0][1]
         assert pending.status == "sent"
         assert deferred.status == "deferred"
-        await checkin_test_cmd(message, session, settings=settings)
-        assert len(message.bot.sent) == 1
-        assert "Нет ожидающих check-in" in message.answers[-1][0]
+        assert "Тестовый check-in создан" in message.answers[-1][0]
+        await checkin_callback(_Callback(f"checkin:{pending.id}:unknown"), session, settings=settings)
+        assert await session.scalar(select(func.count()).select_from(ActivityEntry)) == 0
+
+        second = _Message()
+        await checkin_test_cmd(second, session, settings=settings)
+        assert len(second.bot.sent) == 1
+        assert "Сейчас по плану:" in second.bot.sent[0][1]
+        assert "Тестовый check-in создан" in second.answers[-1][0]
+        assert await session.scalar(select(func.count()).select_from(ActivityEntry)) == 0
 
 
 async def test_unknown_and_defer_create_no_activity_or_waste() -> None:
@@ -143,7 +150,7 @@ async def test_unknown_and_defer_create_no_activity_or_waste() -> None:
 async def main_async() -> None:
     await test_actions_are_owner_only_and_idempotent()
     await test_missing_is_safe_and_keyboard_complete()
-    await test_checkin_test_sends_nearest_pending_and_skips_deferred()
+    await test_checkin_test_sends_nearest_pending_and_creates_fallback_window()
     await test_unknown_and_defer_create_no_activity_or_waste()
 
 
