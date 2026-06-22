@@ -54,6 +54,8 @@ async def test_answers_are_readable_without_fake_activity() -> None:
         )
         assert summary.aligned_checkins == 1
         assert summary.unknown_checkins == 1
+        assert summary.unknown_minutes == 60.0
+        assert summary.no_data_minutes == 1380.0
         assert summary.deferred_checkins == 1
         assert summary.owner_marked_waste_minutes == 0
         assert await session.scalar(select(func.count()).select_from(ActivityEntry)) == 0
