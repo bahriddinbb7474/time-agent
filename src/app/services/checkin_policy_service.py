@@ -23,7 +23,7 @@ class CheckinPolicyService:
         *,
         user_id: int,
         usage_date: date,
-        interval_minutes: int = 60,
+        interval_minutes: int = 120,
     ) -> list[Checkin]:
         if interval_minutes not in {60, 120}:
             raise DailyControlValidationError("check-in interval must be 60 or 120 minutes")
@@ -80,4 +80,3 @@ class CheckinPolicyService:
             )
         )
         return list(result.scalars().all())
-

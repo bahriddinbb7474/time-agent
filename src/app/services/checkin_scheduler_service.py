@@ -12,7 +12,6 @@ from app.services.checkin_policy_service import CheckinPolicyService
 async def deliver_pending_checkin(session, *, checkin_id: int, bot, user_id: int) -> bool:
     from sqlalchemy import select
     from app.db.models import Checkin, TimeBlock
-    from app.keyboards.checkins import build_checkin_keyboard
 
     row = await session.get(Checkin, checkin_id)
     if row is None or row.user_id != user_id or row.status != "pending":
@@ -26,12 +25,23 @@ async def deliver_pending_checkin(session, *, checkin_id: int, bot, user_id: int
         ).order_by(TimeBlock.start_at, TimeBlock.id)
     )
     block = block_result.scalars().first()
-    title = block.title if block is not None else "свободный интервал"
-    await bot.send_message(
-        user_id,
-        f"Сейчас по плану: {title}",
-        reply_markup=build_checkin_keyboard(row.id),
-    )
+    lines = [
+        "Что было за этот интервал?",
+        "Ответьте текстом или голосом.",
+        "",
+        "Примеры:",
+        "• не помню",
+        "• работал с оплатами",
+        "• занимался Time-Agent",
+        "• отдыхал",
+        "• потерял время впустую",
+    ]
+    if block is not None:
+        lines.extend(("", f"По плану было: {block.title}"))
+    start = row.window_start.strftime("%H:%M")
+    end = row.window_end.strftime("%H:%M")
+    lines.append(f"Интервал: [{start}-{end}]({start}-{end})")
+    await bot.send_message(user_id, "\n".join(lines))
     row.status = "sent"
     row.prompted_at = datetime.now(APP_TZ)
     row.updated_at = row.prompted_at
@@ -61,7 +71,7 @@ class CheckinSchedulerService:
         scheduler,
         user_id: int,
         today: date,
-        interval_minutes: int = 60,
+        interval_minutes: int = 120,
         now: datetime | None = None,
         bot=None,
     ) -> list[int]:

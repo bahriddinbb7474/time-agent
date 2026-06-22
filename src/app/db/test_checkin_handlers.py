@@ -113,7 +113,8 @@ async def test_checkin_test_sends_nearest_pending_and_creates_fallback_window() 
         settings = SimpleNamespace(allowed_telegram_id=USER_ID)
         await checkin_test_cmd(message, session, settings=settings)
         assert len(message.bot.sent) == 1
-        assert "Сейчас по плану:" in message.bot.sent[0][1]
+        assert "Ответьте текстом или голосом." in message.bot.sent[0][1]
+        assert message.bot.sent[0][2] is None
         assert pending.status == "sent"
         assert deferred.status == "deferred"
         assert "Тестовый check-in создан" in message.answers[-1][0]
@@ -123,7 +124,8 @@ async def test_checkin_test_sends_nearest_pending_and_creates_fallback_window() 
         second = _Message()
         await checkin_test_cmd(second, session, settings=settings)
         assert len(second.bot.sent) == 1
-        assert "Сейчас по плану:" in second.bot.sent[0][1]
+        assert "Ответьте текстом или голосом." in second.bot.sent[0][1]
+        assert second.bot.sent[0][2] is None
         assert "Тестовый check-in создан" in second.answers[-1][0]
         assert await session.scalar(select(func.count()).select_from(ActivityEntry)) == 0
 

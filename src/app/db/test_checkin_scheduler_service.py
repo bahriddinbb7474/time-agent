@@ -63,8 +63,8 @@ async def test_recovery_is_restart_safe_and_skips_protected() -> None:
             now=datetime(2026, 6, 21, 0, tzinfo=TZ),
         )
         assert first == second
-        assert len(first) == 18
-        assert len(scheduler.jobs) == 18
+        assert len(first) == 9
+        assert len(scheduler.jobs) == 9
 
 
 async def test_missing_schedule_creates_no_jobs() -> None:
