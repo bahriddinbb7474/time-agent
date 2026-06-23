@@ -7,16 +7,28 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.db.models import Base
+from app.db.models import Base, Checkin
 from app.services.checkin_policy_service import CheckinPolicyService
-from app.services.daily_control_service import DailyScheduleService, TimeBlockService
+from app.services.daily_control_service import (
+    ActivityEntryService,
+    CheckinService,
+    DailyScheduleService,
+    TimeBlockService,
+)
 
 
 USER_ID = 123456789
 DAY = date(2026, 6, 21)
 TZ = timezone(timedelta(hours=5))
+
+
+def _overlaps(row, start: datetime, end: datetime) -> bool:
+    row_start = row.window_start.replace(tzinfo=TZ)
+    row_end = row.window_end.replace(tzinfo=TZ)
+    return row_start < end and row_end > start
 
 
 @asynccontextmanager
@@ -57,15 +69,27 @@ async def test_policy_is_idempotent_and_suppresses_protected_windows() -> None:
         service = CheckinPolicyService(session)
         first = await service.plan_for_date(user_id=USER_ID, usage_date=DAY)
         second = await service.plan_for_date(user_id=USER_ID, usage_date=DAY)
-        assert len(first) == 24
+        assert len(first) == 9
         assert [row.id for row in second] == [row.id for row in first]
         assert all(row.schedule_id == schedule.id for row in first)
         assert all(row.schedule_version == schedule.version for row in first)
         assert all(row.usage_date == DAY for row in first)
-        assert sum(row.status == "deferred" for row in first) == 7
+        assert all(row.status == "pending" for row in first)
         assert all(
-            row.response_mode == "protected_slot"
-            for row in first if row.status == "deferred"
+            not _overlaps(
+                row,
+                datetime(2026, 6, 21, 0, tzinfo=TZ),
+                datetime(2026, 6, 21, 6, tzinfo=TZ),
+            )
+            for row in first
+        )
+        assert all(
+            not _overlaps(
+                row,
+                datetime(2026, 6, 21, 12, tzinfo=TZ),
+                datetime(2026, 6, 21, 13, tzinfo=TZ),
+            )
+            for row in first
         )
 
 
@@ -80,10 +104,86 @@ async def test_120_minute_interval() -> None:
         assert len(rows) == 12
 
 
+async def test_confirmed_activity_and_unknown_are_not_prompted_again() -> None:
+    async with _session_ctx() as session:
+        await DailyScheduleService(session).create(
+            user_id=USER_ID, usage_date=DAY, status="confirmed"
+        )
+        await ActivityEntryService(session).create(
+            user_id=USER_ID,
+            start_at=datetime(2026, 6, 21, 8, tzinfo=TZ),
+            end_at=datetime(2026, 6, 21, 10, tzinfo=TZ),
+            title="Confirmed work",
+            category="work",
+            source="test",
+            owner_confirmed=True,
+        )
+        await CheckinService(session).create(
+            user_id=USER_ID,
+            usage_date=DAY,
+            window_start=datetime(2026, 6, 21, 12, tzinfo=TZ),
+            window_end=datetime(2026, 6, 21, 14, tzinfo=TZ),
+            prompted_at=datetime(2026, 6, 21, 14, tzinfo=TZ),
+            status="answered",
+            response_mode="unknown",
+        )
+        await CheckinService(session).create(
+            user_id=USER_ID,
+            usage_date=DAY,
+            window_start=datetime(2026, 6, 21, 16, tzinfo=TZ),
+            window_end=datetime(2026, 6, 21, 18, tzinfo=TZ),
+            prompted_at=datetime(2026, 6, 21, 18, tzinfo=TZ),
+            status="answered",
+            response_mode="no_data",
+        )
+        rows = await CheckinPolicyService(session).plan_for_date(
+            user_id=USER_ID, usage_date=DAY
+        )
+        repeated = await CheckinPolicyService(session).plan_for_date(
+            user_id=USER_ID, usage_date=DAY
+        )
+        covered = (
+            (datetime(2026, 6, 21, 8, tzinfo=TZ), datetime(2026, 6, 21, 10, tzinfo=TZ)),
+            (datetime(2026, 6, 21, 12, tzinfo=TZ), datetime(2026, 6, 21, 14, tzinfo=TZ)),
+            (datetime(2026, 6, 21, 16, tzinfo=TZ), datetime(2026, 6, 21, 18, tzinfo=TZ)),
+        )
+        assert rows
+        assert [row.id for row in repeated] == [row.id for row in rows]
+        assert all(
+            not _overlaps(row, start, end)
+            for row in rows
+            for start, end in covered
+        )
+
+
+async def test_new_coverage_expires_stale_pending_without_small_gap_noise() -> None:
+    async with _session_ctx() as session:
+        await DailyScheduleService(session).create(
+            user_id=USER_ID, usage_date=DAY, status="confirmed"
+        )
+        service = CheckinPolicyService(session)
+        initial = await service.plan_for_date(user_id=USER_ID, usage_date=DAY)
+        await ActivityEntryService(session).create(
+            user_id=USER_ID,
+            start_at=datetime(2026, 6, 21, 0, tzinfo=TZ),
+            end_at=datetime(2026, 6, 21, 23, 45, tzinfo=TZ),
+            title="Confirmed day",
+            category="work",
+            source="test",
+            owner_confirmed=True,
+        )
+        assert await service.plan_for_date(user_id=USER_ID, usage_date=DAY) == []
+        rows = list((await session.execute(select(Checkin))).scalars().all())
+        assert len(rows) == len(initial)
+        assert all(row.status == "expired" for row in rows)
+
+
 async def main_async() -> None:
     await test_no_confirmed_schedule_means_no_checkins()
     await test_policy_is_idempotent_and_suppresses_protected_windows()
     await test_120_minute_interval()
+    await test_confirmed_activity_and_unknown_are_not_prompted_again()
+    await test_new_coverage_expires_stale_pending_without_small_gap_noise()
 
 
 def main() -> None:

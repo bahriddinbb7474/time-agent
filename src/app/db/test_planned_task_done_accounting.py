@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.time import now_tz
 from app.db.models import ActivityEntry, Base, DailySchedule, Task, TimeBlock
 from app.services.task_service import TaskService
+from app.services.checkin_policy_service import CheckinPolicyService
 
 
 USER_ID = 123456789
@@ -101,6 +102,13 @@ async def test_done_creates_activity_from_confirmed_time_block() -> None:
         assert entry.source == "planned_task"
         assert entry.owner_confirmed is True
         assert entry.waste_marked_by_owner is False
+        checkins = await CheckinPolicyService(session).plan_for_date(
+            user_id=USER_ID, usage_date=block.start_at.date()
+        )
+        assert all(
+            not (row.window_start < block.end_at and row.window_end > block.start_at)
+            for row in checkins
+        )
 
 
 async def test_repeated_done_is_idempotent() -> None:
