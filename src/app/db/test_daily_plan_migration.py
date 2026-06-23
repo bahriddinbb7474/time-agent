@@ -18,6 +18,7 @@ def main():
             "20260617_1200_capture_drafts_add_advisor_proposal",
             "20260619_1200_add_daily_control_core",
             "20260620_1200_add_checkin_schedule_context",
+            "20260623_1200_add_goals",
         ]
 
         import sqlite3
@@ -30,6 +31,9 @@ def main():
             plan_columns = {
                 row[1]
                 for row in conn.execute("PRAGMA table_info(daily_plans)").fetchall()
+            }
+            goal_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(goals)").fetchall()
             }
             migration_rows = conn.execute(
                 "SELECT version FROM schema_migrations WHERE version = ?",
@@ -45,6 +49,17 @@ def main():
                 "created_at",
                 "updated_at",
             }.issubset(plan_columns)
+            assert {
+                "id",
+                "user_id",
+                "title",
+                "horizon",
+                "time_group",
+                "status",
+                "preferred_minutes_per_day",
+                "created_at",
+                "updated_at",
+            }.issubset(goal_columns)
             assert len(migration_rows) == 1
         finally:
             conn.close()

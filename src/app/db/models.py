@@ -560,6 +560,32 @@ class DailyTargetProgress(Base):
     )
 
 
+class Goal(Base):
+    __tablename__ = "goals"
+    __table_args__ = (
+        Index("ix_goals_user_status", "user_id", "status"),
+        Index("ix_goals_user_horizon", "user_id", "horizon"),
+        Index("ix_goals_time_group", "time_group"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False)
+    time_group: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    target_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    target_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    preferred_minutes_per_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    planning_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class DailySchedule(Base):
     __tablename__ = "daily_schedules"
     __table_args__ = (

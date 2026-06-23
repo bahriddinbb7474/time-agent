@@ -16,6 +16,7 @@ from app.handlers.add import router as add_router
 from app.handlers.today import router as today_router
 from app.handlers.task_lifecycle import router as task_lifecycle_router
 from app.handlers.quran import router as quran_router
+from app.handlers.goals import router as goals_router
 from app.handlers.targets import router as targets_router
 from app.handlers.capture import router as capture_router
 from app.handlers.usage import router as usage_router
@@ -109,6 +110,7 @@ async def main() -> None:
     dp.include_router(task_lifecycle_router)
     dp.include_router(today_router)
     dp.include_router(quran_router)
+    dp.include_router(goals_router)
     dp.include_router(targets_router)
     dp.include_router(capture_router)
     dp.include_router(usage_router)

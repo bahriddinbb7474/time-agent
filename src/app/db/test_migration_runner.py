@@ -118,6 +118,26 @@ def _assert_final_schema(
             assert {"schedule_id", "schedule_version", "usage_date"}.issubset(
                 _columns(conn, "checkins")
             )
+        if "20260623_1200_add_goals" in expected_versions:
+            assert "goals" in _table_names(conn)
+            assert {
+                "id",
+                "user_id",
+                "title",
+                "horizon",
+                "time_group",
+                "status",
+                "target_value",
+                "unit",
+                "target_mode",
+                "preferred_minutes_per_day",
+                "planning_hint",
+                "priority",
+                "period_start",
+                "period_end",
+                "created_at",
+                "updated_at",
+            }.issubset(_columns(conn, "goals"))
         assert _migration_versions(conn) == expected_versions
     finally:
         conn.close()
@@ -133,6 +153,7 @@ _ALL_REAL_VERSIONS = [
     "20260617_1200_capture_drafts_add_advisor_proposal",
     "20260619_1200_add_daily_control_core",
     "20260620_1200_add_checkin_schedule_context",
+    "20260623_1200_add_goals",
 ]
 
 
