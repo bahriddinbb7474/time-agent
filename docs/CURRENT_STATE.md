@@ -1,6 +1,6 @@
 # Current State — Time-Agent
 
-> Last updated: Stage 20-FINAL text-first hotfix deployed and smoked (2026-06-22).
+> Last updated: Stage 20-FINAL completed; Stage 21 Goal Engine is next (2026-06-23).
 > Canonical plan: `docs/TZ_TIME_AGENT_FINAL_v8_1.md`
 
 ## Authoritative Current Direction
@@ -15,23 +15,18 @@ are removed from current scope; remaining calendar tables/repositories are legac
 
 ### Git and rollout state
 
-- Repository HEAD before this documentation update: `148304c`.
-- Production HEAD: `148304c`.
-- Stage 20-FINAL hotfix `148304c` (`fix: make check-ins text-first`) is pushed, pulled on VPS and deployed with `docker compose up -d --build`.
-- Telegram smoke PASS:
-  - `/checkin_test` shows the text/voice-first message without the old 5 buttons.
-  - Voice/text with AI OFF fails closed and saves nothing.
-  - `не помню` stays rules-first and returns `Записано: нет данных.`
-- Stage 20.7-A unknown policy hardening is local PASS and creates no fake activity.
+- Stage 20-FINAL is complete.
+- Completed scope:
+  - 24-hour mirror
+  - text/voice-first check-ins
+  - gap-driven planner
+- Production smoke: PASS.
+- The text-first hotfix `148304c` remains part of the closed Stage 20-FINAL rollout.
 - Rejected Stage 20.7 B/C/D/E waste-button commits are not in `main`.
 
 ### Important current gaps
 
-- `Сделал` marks a task done but does not create an actual fact interval.
-- Unknown/no-answer/no-data semantics are not yet integrated into the final accounting report.
-- Existing evening summary is not the final 24-hour mirror.
-- Categories are coarse strings, not the shared life/time-group dictionary.
-- Next implementation step: gap-driven planner.
+- Active next stage: Stage 21 Goal Engine.
 
 ## Final v1 Roadmap
 
@@ -42,10 +37,12 @@ are removed from current scope; remaining calendar tables/repositories are legac
    - no answer = no-data; no fake activity and no auto-waste;
    - evening 24-hour group summary and tomorrow advice;
    - privacy/cost regression and production smoke.
+   - status: CLOSED / PRODUCTION PASS.
 2. **Stage 21 — Goal Engine**
    - reuse Daily Targets;
    - add small daily/monthly/six-month/year goal management;
    - map every goal to a time group and surface it in planning/review.
+   - status: NEXT ACTIVE STAGE.
 3. **Stage 22 — Ideas + Relationships**
    - minimal Idea Vault with status, next step and notes;
    - extend RelativesContactRule into simple family/close/friends/work reminders.
@@ -440,11 +437,10 @@ text message
 
 ---
 
-## Next: gap-driven planner
+## Next: Stage 21 — Goal Engine
 
-Stage 20-FINAL text-first hotfix `148304c` is deployed and Telegram-smoked in production.
-Continue with the gap-driven planner only. Google Calendar and external integrations remain
-out of scope and must not be restored.
+Stage 20-FINAL is completed and production-smoked. Continue with Stage 21 Goal Engine.
+Google Calendar and external integrations remain out of scope and must not be restored.
 
 ---
 

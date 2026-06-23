@@ -87,8 +87,8 @@ Time-Agent — Telegram-first goal-driven life dispatcher, внешняя пам
 ## 3. Фактическое текущее состояние
 
 > The detailed list immediately below is the historical v8.1 snapshot. The
-> authoritative current state is `docs/CURRENT_STATE.md`: stages through 20.6 are
-> production-closed, Stage 20.7-A is local PASS at `a9e703e`, and Stage 20-FINAL is next.
+> authoritative current state is `docs/CURRENT_STATE.md`: Stage 20-FINAL is
+> completed and the next active stage is Stage 21 Goal Engine.
 
 ### Закрыто
 
@@ -110,8 +110,7 @@ Time-Agent — Telegram-first goal-driven life dispatcher, внешняя пам
 ### Следующий этап
 
 ```text
-Stage 20-FINAL — 24-hour mirror MVP
-→ Stage 21 Goal Engine
+Stage 21 Goal Engine
 → Stage 22 Ideas + Relationships
 → Stage 23 Production finish + final acceptance
 ```
@@ -980,6 +979,10 @@ The existing task/Quran/health/targets evening report is reused, not duplicated.
 - unknown and waste are never invented;
 - evening report covers approximately 24 hours without pretending exact precision;
 - existing prayer/sleep/schedule/check-in/Advisor safety regressions pass.
+
+## Status
+
+Stage 20-FINAL: CLOSED / PRODUCTION PASS.
 
 # STAGE 21 — Goal Engine
 
